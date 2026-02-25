@@ -7,9 +7,6 @@ import 'react-perfect-scrollbar/dist/css/styles.css'
 // Util Imports
 import { getSystemMode } from '@core/utils/serverHelpers'
 
-// Providers (Client Component com SessionProvider)
-import Providers from '@/components/Providers'
-
 // Style Imports
 import '@/app/globals.css'
 
@@ -31,9 +28,7 @@ const RootLayout = async props => {
     <html id='__next' lang='pt-BR' dir={direction} suppressHydrationWarning>
       <body className='flex is-full min-bs-full flex-auto flex-col'>
         <InitColorSchemeScript attribute='data' defaultMode={systemMode} />
-        <Providers>
-          {children}
-        </Providers>
+        {children}
       </body>
     </html>
   )

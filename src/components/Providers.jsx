@@ -1,16 +1,34 @@
-'use client'
+// Context Imports
+import { VerticalNavProvider } from '@menu/contexts/verticalNavContext'
+import { SettingsProvider } from '@core/contexts/settingsContext'
+import ThemeProvider from '@components/theme'
 
-// NextAuth SessionProvider
-import { SessionProvider } from 'next-auth/react'
+// NextAuth Provider (Client Component separado)
+import NextAuthProvider from '@components/NextAuthProvider'
 
-// Providers wrapper — deve ser Client Component
-// Envolve toda a app com SessionProvider para que
-// useSession() funcione em qualquer componente filho
-const Providers = ({ children, session }) => {
+// Util Imports
+import { getMode, getSettingsFromCookie, getSystemMode } from '@core/utils/serverHelpers'
+
+// Providers — Server Component (async)
+// Mantém SettingsProvider, ThemeProvider e VerticalNavProvider do template
+// + envolve com NextAuthProvider (Client Component) para useSession()
+const Providers = async props => {
+  const { children, direction } = props
+
+  const mode = await getMode()
+  const settingsCookie = await getSettingsFromCookie()
+  const systemMode = await getSystemMode()
+
   return (
-    <SessionProvider session={session}>
-      {children}
-    </SessionProvider>
+    <NextAuthProvider>
+      <VerticalNavProvider>
+        <SettingsProvider settingsCookie={settingsCookie} mode={mode}>
+          <ThemeProvider direction={direction} systemMode={systemMode}>
+            {children}
+          </ThemeProvider>
+        </SettingsProvider>
+      </VerticalNavProvider>
+    </NextAuthProvider>
   )
 }
 
