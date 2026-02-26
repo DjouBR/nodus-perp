@@ -3,13 +3,9 @@ import { getServerSession } from 'next-auth'
 import { authOptions } from '@/libs/auth'
 import { db } from '@/lib/db/index.js'
 import { users, athlete_profiles, sensors, daily_logs, weekly_indices, session_athletes, training_sessions } from '@/lib/db/schema/index.js'
-import { eq, and, desc, sql } from 'drizzle-orm'
+import { eq, and, desc } from 'drizzle-orm'
 
-// ───────────────────────────────────────────────────────────────────
-// GET /api/athletes/[id]
-// Retorna perfil completo do atleta: dados, perfil esportivo,
-// sensor vinculado, últimos 7 daily logs e últimas 10 sessões
-// ───────────────────────────────────────────────────────────────────
+// GET /api/athletes/[id] — perfil completo do atleta
 export async function GET(request, { params }) {
   try {
     const session = await getServerSession(authOptions)
@@ -17,7 +13,8 @@ export async function GET(request, { params }) {
       return NextResponse.json({ error: 'Não autorizado' }, { status: 401 })
     }
 
-    const { id } = params
+    // Next.js 15: params é uma Promise, precisa de await
+    const { id } = await params
 
     // Busca usuário
     const [user] = await db
@@ -91,15 +88,15 @@ export async function GET(request, { params }) {
       .orderBy(desc(training_sessions.start_datetime))
       .limit(10)
 
-    // Remove campos sensíveis antes de retornar
+    // Remove campos sensíveis
     const { password_hash, ...safeUser } = user
 
     return NextResponse.json({
       ...safeUser,
-      profile:         profile  ?? null,
-      sensor:          sensor   ?? null,
+      profile:         profile ?? null,
+      sensor:          sensor  ?? null,
       recent_logs:     logs,
-      acwr:            acwr     ?? null,
+      acwr:            acwr    ?? null,
       recent_sessions: recentSessions,
     })
 
