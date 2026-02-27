@@ -15,36 +15,41 @@ const PUBLIC_ROUTES = [
 ]
 
 // ─── Permissões por rota: quais roles podem acessar ──────────────────────────
+const ALL_ROLES = ['super_admin', 'tenant_admin', 'coach', 'athlete', 'receptionist']
+
 const ROUTE_PERMISSIONS = {
   // Super Admin exclusivo
   '/admin': ['super_admin'],
 
-  // Tenant Admin (academia, franqueador, treinador independente) + super_admin
+  // Tenant Admin + super_admin
   '/academies': ['super_admin', 'tenant_admin'],
-  '/settings':  ['super_admin', 'tenant_admin'],
+  '/coaches':   ['super_admin', 'tenant_admin'],
+
+  // Tenant Admin + super_admin + coach
   '/reports':   ['super_admin', 'tenant_admin', 'coach'],
   '/planning':  ['super_admin', 'tenant_admin', 'coach'],
+  '/sessions':  ['super_admin', 'tenant_admin', 'coach'],
+  '/monitoring':['super_admin', 'tenant_admin', 'coach'],
 
-  // Coach + Tenant Admin + super_admin
-  '/sessions':   ['super_admin', 'tenant_admin', 'coach'],
-  '/athletes':   ['super_admin', 'tenant_admin', 'coach', 'receptionist'],
-  '/coaches':    ['super_admin', 'tenant_admin'],
-  '/monitoring': ['super_admin', 'tenant_admin', 'coach'],
-  '/daily-logs': ['super_admin', 'tenant_admin', 'coach', 'athlete'],
+  // Todos exceto athlete
+  '/athletes':  ['super_admin', 'tenant_admin', 'coach', 'receptionist'],
 
   // Todos os autenticados
-  '/home': ['super_admin', 'tenant_admin', 'coach', 'athlete', 'receptionist']
+  '/home':       ALL_ROLES,
+  '/daily-logs': ALL_ROLES,
+  '/profile':    ALL_ROLES,   // ← qualquer role autenticado acessa
+  '/settings':   ALL_ROLES,   // ← qualquer role autenticado acessa
 }
 
 // ─── Redirect pós-login por role ─────────────────────────────────────────────
 export const getHomeByRole = role => {
   const homes = {
-    super_admin:          '/admin/dashboard',
-    tenant_admin:         '/home',
-    coach:                '/home',
-    athlete:              '/home',
-    receptionist:         '/home',
-    pending_onboarding:   '/onboarding'
+    super_admin:        '/admin/dashboard',
+    tenant_admin:       '/home',
+    coach:              '/home',
+    athlete:            '/home',
+    receptionist:       '/home',
+    pending_onboarding: '/onboarding'
   }
   return homes[role] ?? '/home'
 }
@@ -82,7 +87,6 @@ export default withAuth(
   },
   {
     callbacks: {
-      // Retorna true para deixar o middleware principal decidir
       authorized: ({ token }) => true
     }
   }
@@ -90,7 +94,6 @@ export default withAuth(
 
 export const config = {
   matcher: [
-    // Protege todas as rotas exceto _next, api/auth e arquivos estáticos
     '/((?!_next/static|_next/image|favicon.ico|api/auth|images|assets).*)'
   ]
 }
