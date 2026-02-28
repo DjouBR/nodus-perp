@@ -1,4 +1,6 @@
 // NODUS — Middleware de Proteção de Rotas com RBAC
+// LGPD: super_admin acessa apenas dados operacionais/agregados do seu escopo.
+// Dados pessoais de atletas, coaches e recepcionistas são isolados por tenant.
 import { withAuth } from 'next-auth/middleware'
 import { NextResponse } from 'next/server'
 
@@ -10,33 +12,36 @@ const PUBLIC_ROUTES = [
 const ALL_ROLES = ['super_admin', 'tenant_admin', 'coach', 'athlete', 'receptionist']
 
 const ROUTE_PERMISSIONS = {
-  // ── Super Admin ────────────────────────────────────────────────
+  // ── Super Admin — escopo: gestão do SaaS, sem dados pessoais de atletas ──
   '/admin':              ['super_admin'],
+  // Nota: super_admin usa /admin/tenants para ver dados operacionais dos tenants
+  // e NUNCA acessa /academy/settings, /coach/settings etc. diretamente.
 
-  // ── Tenant Admin ───────────────────────────────────────────────
+  // ── Tenant Admin ─────────────────────────────────────────────
   '/academies':          ['super_admin', 'tenant_admin'],
   '/coaches':            ['super_admin', 'tenant_admin'],
 
-  // ── Coach + Tenant Admin ───────────────────────────────────────
-  '/reports':            ['super_admin', 'tenant_admin', 'coach'],
-  '/planning':           ['super_admin', 'tenant_admin', 'coach'],
-  '/sessions':           ['super_admin', 'tenant_admin', 'coach'],
-  '/monitoring':         ['super_admin', 'tenant_admin', 'coach', 'athlete'],
+  // ── Coach + Tenant Admin ─────────────────────────────────────
+  '/reports':            ['tenant_admin', 'coach'],
+  '/planning':           ['tenant_admin', 'coach'],
+  '/sessions':           ['tenant_admin', 'coach'],
+  '/monitoring':         ['tenant_admin', 'coach', 'athlete'],
 
-  // ── Operacional ────────────────────────────────────────────────
-  '/athletes':           ['super_admin', 'tenant_admin', 'coach', 'receptionist'],
+  // ── Operacional ─────────────────────────────────────────────
+  '/athletes':           ['tenant_admin', 'coach', 'receptionist'],
 
-  // ── Settings por role (cada um acessa apenas o seu) ────────────
+  // ── Settings isolados por role (sem cross-access) ─────────────────
+  // super_admin gerencia OUTROS tenants via /admin — não via settings deles
   '/admin/settings':        ['super_admin'],
-  '/academy/settings':      ['super_admin', 'tenant_admin'],
-  '/coach/settings':        ['super_admin', 'coach'],
-  '/athlete/settings':      ['super_admin', 'athlete'],
-  '/receptionist/settings': ['super_admin', 'receptionist'],
+  '/academy/settings':      ['tenant_admin'],
+  '/coach/settings':        ['coach'],
+  '/athlete/settings':      ['athlete'],
+  '/receptionist/settings': ['receptionist'],
 
-  // ── Todos os autenticados ──────────────────────────────────────
+  // ── Todos os autenticados ─────────────────────────────────────
   '/home':               ALL_ROLES,
   '/profile':            ALL_ROLES,
-  '/daily-logs':         ['super_admin', 'tenant_admin', 'coach', 'athlete'],
+  '/daily-logs':         ['tenant_admin', 'coach', 'athlete'],
 }
 
 export const getHomeByRole = role => {
