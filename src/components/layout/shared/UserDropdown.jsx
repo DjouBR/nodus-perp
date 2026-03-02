@@ -25,22 +25,30 @@ const ROLE_LABELS = {
   athlete:      'Atleta',
 }
 
-// Rotas de settings por role
 const SETTINGS_URL = {
   super_admin:   '/admin/settings',
-  tenant_admin:  '/academy/settings',
+  tenant_admin:  '/academy/config',
   coach:         '/coach/settings',
   athlete:       '/athlete/settings',
   receptionist:  '/receptionist/settings',
 }
 
-// Rota de perfil por role
 const PROFILE_URL = {
   super_admin:   '/admin/userprofile',
-  tenant_admin:  '/profile',
+  tenant_admin:  '/academy/userprofile',
   coach:         '/profile',
   athlete:       '/profile',
   receptionist:  '/profile',
+}
+
+// Itens extras do dropdown por role
+// formato: { label, icon, url }
+const EXTRA_ITEMS = {
+  super_admin:   [],
+  tenant_admin:  [{ label: 'Mensagens', icon: 'tabler-message', url: '/academy/messages' }],
+  coach:         [],
+  athlete:       [],
+  receptionist:  [],
 }
 
 const BadgeContentSpan = styled('span')({
@@ -72,6 +80,7 @@ const UserDropdown = () => {
   const roleName    = ROLE_LABELS[user?.role] ?? user?.role ?? ''
   const settingsUrl = SETTINGS_URL[user?.role] ?? '/profile'
   const profileUrl  = PROFILE_URL[user?.role] ?? '/profile'
+  const extraItems  = EXTRA_ITEMS[user?.role] ?? []
 
   const handleDropdownOpen = () => setOpen(o => !o)
 
@@ -145,19 +154,19 @@ const UserDropdown = () => {
                     <Typography color='text.primary'>Meu Perfil</Typography>
                   </MenuItem>
 
+                  {/* Itens extras por role (ex: Mensagens para tenant_admin) */}
+                  {extraItems.map(item => (
+                    <MenuItem key={item.url} className='mli-2 gap-3' onClick={e => handleDropdownClose(e, item.url)}>
+                      <i className={item.icon} />
+                      <Typography color='text.primary'>{item.label}</Typography>
+                    </MenuItem>
+                  ))}
+
                   {/* Configurações */}
                   <MenuItem className='mli-2 gap-3' onClick={e => handleDropdownClose(e, settingsUrl)}>
                     <i className='tabler-settings' />
                     <Typography color='text.primary'>Configurações</Typography>
                   </MenuItem>
-
-                  {/* Atletas — só para não-atletas e não super_admin */}
-                  {user?.role !== 'athlete' && user?.role !== 'super_admin' && (
-                    <MenuItem className='mli-2 gap-3' onClick={e => handleDropdownClose(e, '/athletes')}>
-                      <i className='tabler-users' />
-                      <Typography color='text.primary'>Atletas</Typography>
-                    </MenuItem>
-                  )}
 
                   <Divider className='mlb-1' />
 
