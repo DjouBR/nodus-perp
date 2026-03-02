@@ -25,12 +25,22 @@ const ROLE_LABELS = {
   athlete:      'Atleta',
 }
 
+// Rotas de settings por role
 const SETTINGS_URL = {
   super_admin:   '/admin/settings',
   tenant_admin:  '/academy/settings',
   coach:         '/coach/settings',
   athlete:       '/athlete/settings',
   receptionist:  '/receptionist/settings',
+}
+
+// Rota de perfil por role
+const PROFILE_URL = {
+  super_admin:   '/admin/userprofile',
+  tenant_admin:  '/profile',
+  coach:         '/profile',
+  athlete:       '/profile',
+  receptionist:  '/profile',
 }
 
 const BadgeContentSpan = styled('span')({
@@ -58,9 +68,10 @@ const UserDropdown = () => {
   const { settings } = useSettings()
   const { data: session } = useSession()
 
-  const user      = session?.user
-  const roleName  = ROLE_LABELS[user?.role] ?? user?.role ?? ''
+  const user        = session?.user
+  const roleName    = ROLE_LABELS[user?.role] ?? user?.role ?? ''
   const settingsUrl = SETTINGS_URL[user?.role] ?? '/profile'
+  const profileUrl  = PROFILE_URL[user?.role] ?? '/profile'
 
   const handleDropdownOpen = () => setOpen(o => !o)
 
@@ -76,10 +87,9 @@ const UserDropdown = () => {
   }
 
   const AvatarEl = ({ size = 38 }) => user?.avatar ? (
-    <Avatar alt={user.name} src={user.avatar}
-      sx={size !== 38 ? {} : { width: size, height: size }} />
+    <Avatar alt={user.name} src={user.avatar} sx={{ width: size, height: size }} />
   ) : (
-    <Avatar sx={{ width: size, height: size, backgroundColor: avatarColor(user?.name), color: '#fff', fontSize: size === 38 ? '0.875rem' : '1rem', fontWeight: 700 }}>
+    <Avatar sx={{ width: size, height: size, backgroundColor: avatarColor(user?.name), color: '#fff', fontSize: size <= 38 ? '0.875rem' : '1rem', fontWeight: 700 }}>
       {getInitials(user?.name)}
     </Avatar>
   )
@@ -92,11 +102,11 @@ const UserDropdown = () => {
         badgeContent={<BadgeContentSpan onClick={handleDropdownOpen} />}
         anchorOrigin={{ vertical: 'bottom', horizontal: 'right' }}
         className='mis-2'
+        onClick={handleDropdownOpen}
+        sx={{ cursor: 'pointer' }}
       >
         <AvatarEl size={38} />
       </Badge>
-      {/* wrapper invisível para capturar o click no badge */}
-      <span ref={anchorRef} onClick={handleDropdownOpen} style={{ position: 'absolute', width: 38, height: 38, cursor: 'pointer', opacity: 0 }} />
 
       <Popper
         open={open}
@@ -113,6 +123,7 @@ const UserDropdown = () => {
               <ClickAwayListener onClickAway={e => handleDropdownClose(e)}>
                 <MenuList>
 
+                  {/* Cabeçalho */}
                   <div className='flex items-center plb-2 pli-6 gap-2' tabIndex={-1}>
                     <AvatarEl size={40} />
                     <div className='flex items-start flex-col'>
@@ -128,17 +139,20 @@ const UserDropdown = () => {
 
                   <Divider className='mlb-1' />
 
-                  <MenuItem className='mli-2 gap-3' onClick={e => handleDropdownClose(e, '/profile')}>
+                  {/* Meu Perfil */}
+                  <MenuItem className='mli-2 gap-3' onClick={e => handleDropdownClose(e, profileUrl)}>
                     <i className='tabler-user' />
                     <Typography color='text.primary'>Meu Perfil</Typography>
                   </MenuItem>
 
+                  {/* Configurações */}
                   <MenuItem className='mli-2 gap-3' onClick={e => handleDropdownClose(e, settingsUrl)}>
                     <i className='tabler-settings' />
                     <Typography color='text.primary'>Configurações</Typography>
                   </MenuItem>
 
-                  {user?.role !== 'athlete' && (
+                  {/* Atletas — só para não-atletas e não super_admin */}
+                  {user?.role !== 'athlete' && user?.role !== 'super_admin' && (
                     <MenuItem className='mli-2 gap-3' onClick={e => handleDropdownClose(e, '/athletes')}>
                       <i className='tabler-users' />
                       <Typography color='text.primary'>Atletas</Typography>
@@ -147,6 +161,7 @@ const UserDropdown = () => {
 
                   <Divider className='mlb-1' />
 
+                  {/* Logout */}
                   <div className='flex items-center plb-2 pli-3'>
                     <Button fullWidth variant='contained' color='error' size='small'
                       endIcon={<i className='tabler-logout' />}

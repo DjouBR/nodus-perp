@@ -28,17 +28,6 @@ const RenderExpandIcon = ({ open, transitionDuration }) => (
   </StyledVerticalNavExpandIcon>
 )
 
-// ─── Definição de acesso por role ─────────────────────────────────────────────
-const can = (role, allowedRoles) => allowedRoles.includes(role)
-
-const ROLES = {
-  SUPER_ADMIN:  'super_admin',
-  TENANT_ADMIN: 'tenant_admin',
-  COACH:        'coach',
-  ATHLETE:      'athlete',
-  RECEPTIONIST: 'receptionist'
-}
-
 const VerticalMenu = ({ scrollMenu }) => {
   const theme = useTheme()
   const verticalNavOptions = useVerticalNav()
@@ -47,27 +36,14 @@ const VerticalMenu = ({ scrollMenu }) => {
   const { isBreakpointReached, transitionDuration } = verticalNavOptions
   const ScrollWrapper = isBreakpointReached ? 'div' : PerfectScrollbar
 
-  // Role do usuário logado (fallback: athlete para segurança)
   const role = session?.user?.role ?? 'athlete'
-
-  // ─── Helpers de permissão ────────────────────────────────────────────────────
-  const isAdmin      = can(role, [ROLES.SUPER_ADMIN, ROLES.TENANT_ADMIN])
-  const isCoach      = can(role, [ROLES.SUPER_ADMIN, ROLES.TENANT_ADMIN, ROLES.COACH])
-  const isReception  = can(role, [ROLES.SUPER_ADMIN, ROLES.TENANT_ADMIN, ROLES.RECEPTIONIST])
-  const isSuperAdmin = role === ROLES.SUPER_ADMIN
-  const isAthlete    = role === ROLES.ATHLETE
 
   return (
     <ScrollWrapper
       {...(isBreakpointReached
-        ? {
-            className: 'bs-full overflow-y-auto overflow-x-hidden',
-            onScroll: container => scrollMenu(container, false)
-          }
-        : {
-            options: { wheelPropagation: false, suppressScrollX: true },
-            onScrollY: container => scrollMenu(container, true)
-          })}
+        ? { className: 'bs-full overflow-y-auto overflow-x-hidden', onScroll: container => scrollMenu(container, false) }
+        : { options: { wheelPropagation: false, suppressScrollX: true }, onScrollY: container => scrollMenu(container, true) }
+      )}
     >
       <Menu
         popoutMenuOffset={{ mainAxis: 23 }}
@@ -77,128 +53,145 @@ const VerticalMenu = ({ scrollMenu }) => {
         menuSectionStyles={menuSectionStyles(verticalNavOptions, theme)}
       >
 
-        {/* ── Dashboard ── visível para todos ─────────────────────────────── */}
-        <MenuItem href='/home' icon={<i className='tabler-smart-home' />}>
-          Dashboard
-        </MenuItem>
+        {/* ═══════════════════════════════════════════════════════════════
+            SUPER ADMIN
+        ═══════════════════════════════════════════════════════════════ */}
+        {role === 'super_admin' && (
+          <>
+            <MenuItem href='/admin/dashboard' icon={<i className='tabler-smart-home' />}>
+              Dashboard
+            </MenuItem>
 
-        {/* ── SUPER ADMIN exclusivo ──────────────────────────────────────── */}
-        {isSuperAdmin && (
-          <MenuSection label='Administração'>
-            <MenuItem href='/admin/dashboard' icon={<i className='tabler-layout-dashboard' />}>
-              Painel Global
-            </MenuItem>
-            <MenuItem href='/admin/tenants' icon={<i className='tabler-building-skyscraper' />}>
-              Tenants
-            </MenuItem>
-            <MenuItem href='/admin/plans' icon={<i className='tabler-credit-card' />}>
-              Planos
-            </MenuItem>
-            <MenuItem href='/admin/system' icon={<i className='tabler-server' />}>
-              Sistema
-            </MenuItem>
-          </MenuSection>
-        )}
-
-        {/* ── Gestão: Admin + Recepção ──────────────────────────────────── */}
-        {(isAdmin || isReception) && (
-          <MenuSection label='Gestão'>
-            {isAdmin && (
-              <MenuItem href='/academies' icon={<i className='tabler-building-community' />}>
-                Academias
+            <MenuSection label='Gestão'>
+              <MenuItem href='/admin/clients' icon={<i className='tabler-building-community' />}>
+                Clientes
               </MenuItem>
-            )}
-            <MenuItem href='/athletes' icon={<i className='tabler-users' />}>
-              Atletas
-            </MenuItem>
-            {isAdmin && (
-              <MenuItem href='/coaches' icon={<i className='tabler-user-star' />}>
-                Coaches
+              <MenuItem href='/admin/crm' icon={<i className='tabler-address-book' />}>
+                CRM
               </MenuItem>
-            )}
-          </MenuSection>
-        )}
+            </MenuSection>
 
-        {/* ── Treino: Coach + Admin ──────────────────────────────────────── */}
-        {isCoach && (
-          <MenuSection label='Treino'>
-            <MenuItem href='/sessions' icon={<i className='tabler-activity' />}>
-              Sessões
-            </MenuItem>
-            <MenuItem href='/daily-logs' icon={<i className='tabler-clipboard-text' />}>
-              Daily Logs
-            </MenuItem>
-            <MenuItem href='/planning' icon={<i className='tabler-calendar-stats' />}>
-              Planejamento
-            </MenuItem>
-          </MenuSection>
-        )}
+            <MenuSection label='Planos / Assinaturas'>
+              <MenuItem href='/admin/plans' icon={<i className='tabler-credit-card' />}>
+                Planos
+              </MenuItem>
+              <MenuItem href='/admin/paymenthistory' icon={<i className='tabler-receipt' />}>
+                Histórico de Cobranças
+              </MenuItem>
+            </MenuSection>
 
-        {/* ── Monitoramento: Coach + Admin ───────────────────────────────── */}
-        {isCoach && (
-          <MenuSection label='Monitoramento'>
-            <MenuItem href='/monitoring' icon={<i className='tabler-heart-rate-monitor' />}>
-              Ao Vivo
-            </MenuItem>
-            <MenuItem href='/reports' icon={<i className='tabler-chart-bar' />}>
-              Relatórios
-            </MenuItem>
-          </MenuSection>
-        )}
+            <MenuSection label='Financeiro'>
+              <MenuItem href='/admin/financial' icon={<i className='tabler-chart-pie' />}>
+                Dashboard
+              </MenuItem>
+              <MenuItem href='/admin/cashflow' icon={<i className='tabler-cash' />}>
+                Receitas / Despesas
+              </MenuItem>
+            </MenuSection>
 
-        {/* ── Atleta: menu pessoal ───────────────────────────────────────── */}
-        {isAthlete && (
-          <MenuSection label='Meu Treino'>
-            <MenuItem href='/my-training' icon={<i className='tabler-barbell' />}>
-              Meu Plano
-            </MenuItem>
-            <MenuItem href='/daily-logs' icon={<i className='tabler-clipboard-text' />}>
-              Daily Log
-            </MenuItem>
-            <MenuItem href='/my-history' icon={<i className='tabler-history' />}>
-              Meu Histórico
-            </MenuItem>
-          </MenuSection>
-        )}
+            <MenuSection label='Monitoramento'>
+              <MenuItem href='/admin/monitoring' icon={<i className='tabler-activity' />}>
+                Dashboard
+              </MenuItem>
+              <MenuItem href='/admin/requests' icon={<i className='tabler-inbox' />}>
+                Solicitações
+              </MenuItem>
+              <MenuItem href='/admin/systemlogs' icon={<i className='tabler-terminal-2' />}>
+                Logs do Sistema
+              </MenuItem>
+            </MenuSection>
 
-        {isAthlete && (
-          <MenuSection label='Evolução'>
-            <MenuItem href='/my-stats' icon={<i className='tabler-chart-line' />}>
-              Minha Evolução
-            </MenuItem>
-            <MenuItem href='/gamification' icon={<i className='tabler-trophy' />}>
-              Ranking e Badges
-            </MenuItem>
-          </MenuSection>
-        )}
-
-        {/* ── Recepção: financeiro limitado ─────────────────────────────── */}
-        {role === ROLES.RECEPTIONIST && (
-          <MenuSection label='Recepção'>
-            <MenuItem href='/checkin' icon={<i className='tabler-scan' />}>
-              Check-in
-            </MenuItem>
-            <MenuItem href='/payments' icon={<i className='tabler-cash' />}>
-              Pagamentos
-            </MenuItem>
-          </MenuSection>
-        )}
-
-        {/* ── Sistema: apenas Admin ─────────────────────────────────────── */}
-        {isAdmin && (
-          <MenuSection label='Sistema'>
-            <MenuItem href='/settings' icon={<i className='tabler-settings' />}>
+            <MenuItem href='/admin/settings' icon={<i className='tabler-settings' />}>
               Configurações
             </MenuItem>
-          </MenuSection>
+          </>
         )}
 
-        {/* ── Perfil: todos ─────────────────────────────────────────────── */}
-        <MenuSection label='Conta'>
-          <MenuItem href='/profile' icon={<i className='tabler-user-circle' />}>
-            Meu Perfil
-          </MenuItem>
-        </MenuSection>
+        {/* ═══════════════════════════════════════════════════════════════
+            TENANT ADMIN — placeholder até ditar o menu
+        ═══════════════════════════════════════════════════════════════ */}
+        {role === 'tenant_admin' && (
+          <>
+            <MenuItem href='/home' icon={<i className='tabler-smart-home' />}>
+              Dashboard
+            </MenuItem>
+            <MenuSection label='Gestão'>
+              <MenuItem href='/athletes' icon={<i className='tabler-users' />}>Atletas</MenuItem>
+              <MenuItem href='/coaches' icon={<i className='tabler-user-star' />}>Coaches</MenuItem>
+            </MenuSection>
+            <MenuSection label='Treino'>
+              <MenuItem href='/sessions' icon={<i className='tabler-activity' />}>Sessões</MenuItem>
+              <MenuItem href='/planning' icon={<i className='tabler-calendar-stats' />}>Planejamento</MenuItem>
+            </MenuSection>
+            <MenuSection label='Monitoramento'>
+              <MenuItem href='/monitoring' icon={<i className='tabler-heart-rate-monitor' />}>Ao Vivo</MenuItem>
+              <MenuItem href='/reports' icon={<i className='tabler-chart-bar' />}>Relatórios</MenuItem>
+            </MenuSection>
+            <MenuItem href='/academy/settings' icon={<i className='tabler-settings' />}>Configurações</MenuItem>
+          </>
+        )}
+
+        {/* ═══════════════════════════════════════════════════════════════
+            COACH — placeholder até ditar o menu
+        ═══════════════════════════════════════════════════════════════ */}
+        {role === 'coach' && (
+          <>
+            <MenuItem href='/home' icon={<i className='tabler-smart-home' />}>
+              Dashboard
+            </MenuItem>
+            <MenuSection label='Atletas'>
+              <MenuItem href='/athletes' icon={<i className='tabler-users' />}>Meus Atletas</MenuItem>
+            </MenuSection>
+            <MenuSection label='Treino'>
+              <MenuItem href='/sessions' icon={<i className='tabler-activity' />}>Sessões</MenuItem>
+              <MenuItem href='/planning' icon={<i className='tabler-calendar-stats' />}>Planejamento</MenuItem>
+              <MenuItem href='/daily-logs' icon={<i className='tabler-clipboard-text' />}>Daily Logs</MenuItem>
+            </MenuSection>
+            <MenuSection label='Monitoramento'>
+              <MenuItem href='/monitoring' icon={<i className='tabler-heart-rate-monitor' />}>Ao Vivo</MenuItem>
+              <MenuItem href='/reports' icon={<i className='tabler-chart-bar' />}>Relatórios</MenuItem>
+            </MenuSection>
+            <MenuItem href='/coach/settings' icon={<i className='tabler-settings' />}>Configurações</MenuItem>
+          </>
+        )}
+
+        {/* ═══════════════════════════════════════════════════════════════
+            RECEPTIONIST — placeholder até ditar o menu
+        ═══════════════════════════════════════════════════════════════ */}
+        {role === 'receptionist' && (
+          <>
+            <MenuItem href='/home' icon={<i className='tabler-smart-home' />}>
+              Dashboard
+            </MenuItem>
+            <MenuSection label='Recepção'>
+              <MenuItem href='/athletes' icon={<i className='tabler-users' />}>Atletas</MenuItem>
+              <MenuItem href='/checkin' icon={<i className='tabler-scan' />}>Check-in</MenuItem>
+              <MenuItem href='/payments' icon={<i className='tabler-cash' />}>Pagamentos</MenuItem>
+            </MenuSection>
+            <MenuItem href='/receptionist/settings' icon={<i className='tabler-settings' />}>Configurações</MenuItem>
+          </>
+        )}
+
+        {/* ═══════════════════════════════════════════════════════════════
+            ATHLETE — placeholder até ditar o menu
+        ═══════════════════════════════════════════════════════════════ */}
+        {role === 'athlete' && (
+          <>
+            <MenuItem href='/home' icon={<i className='tabler-smart-home' />}>
+              Dashboard
+            </MenuItem>
+            <MenuSection label='Meu Treino'>
+              <MenuItem href='/my-training' icon={<i className='tabler-barbell' />}>Meu Plano</MenuItem>
+              <MenuItem href='/daily-logs' icon={<i className='tabler-clipboard-text' />}>Daily Log</MenuItem>
+              <MenuItem href='/my-history' icon={<i className='tabler-history' />}>Meu Histórico</MenuItem>
+            </MenuSection>
+            <MenuSection label='Evolução'>
+              <MenuItem href='/my-stats' icon={<i className='tabler-chart-line' />}>Minha Evolução</MenuItem>
+              <MenuItem href='/gamification' icon={<i className='tabler-trophy' />}>Ranking e Badges</MenuItem>
+            </MenuSection>
+            <MenuItem href='/athlete/settings' icon={<i className='tabler-settings' />}>Configurações</MenuItem>
+          </>
+        )}
 
       </Menu>
     </ScrollWrapper>
