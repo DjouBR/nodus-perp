@@ -113,21 +113,31 @@ const VerticalMenu = ({ scrollMenu }) => {
         {role === 'coach' && (
           <>
             <MenuItem href='/home' icon={<i className='tabler-smart-home' />}>Dashboard</MenuItem>
+
             <MenuSection label='Cadastro'>
               <MenuItem href='/coach/athletes' icon={<i className='tabler-users' />}>Atletas / Alunos</MenuItem>
             </MenuSection>
+
+            <MenuSection label='Financeiro'>
+              <MenuItem href='/coach/financial' icon={<i className='tabler-chart-pie' />}>Dashboard</MenuItem>
+              <MenuItem href='/coach/cashflow' icon={<i className='tabler-cash' />}>Receitas / Despesas</MenuItem>
+            </MenuSection>
+
             <MenuSection label='Sessões de Treino'>
               <MenuItem href='/coach/calendar' icon={<i className='tabler-calendar' />}>Agenda</MenuItem>
               <MenuItem href='/coach/sessionshistory' icon={<i className='tabler-history' />}>Histórico de Treinos</MenuItem>
             </MenuSection>
+
             <MenuSection label='Prescrição de Treino'>
               <MenuItem href='/coach/planning' icon={<i className='tabler-calendar-stats' />}>Planejamento</MenuItem>
               <MenuItem href='/coach/prescription' icon={<i className='tabler-clipboard-text' />}>Prescrição</MenuItem>
             </MenuSection>
+
             <MenuSection label='Monitoramento'>
               <MenuItem href='/coach/monitoring' icon={<i className='tabler-heart-rate-monitor' />}>Tempo Real</MenuItem>
               <MenuItem href='/coach/monitoringoptions' icon={<i className='tabler-adjustments-horizontal' />}>Opções de Exibição</MenuItem>
             </MenuSection>
+
             <MenuSection label='Diversos'>
               <MenuItem href='/coach/report' icon={<i className='tabler-chart-bar' />}>Relatórios</MenuItem>
               <MenuItem href='/coach/gamification' icon={<i className='tabler-trophy' />}>Gamificação</MenuItem>
