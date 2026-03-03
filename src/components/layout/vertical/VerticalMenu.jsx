@@ -28,13 +28,11 @@ const RenderExpandIcon = ({ open, transitionDuration }) => (
   </StyledVerticalNavExpandIcon>
 )
 
-// Dashboard por role — cada role tem seu próprio dashboard
+// Apenas super_admin tem dashboard próprio.
+// Todos os outros roles usam /home, que já renderiza conteúdo por role.
 const DASHBOARD_URL = {
-  super_admin:  '/admin/dashboard',
-  tenant_admin: '/academy/dashboard',
-  coach:        '/coach/dashboard',
-  receptionist: '/home',
-  athlete:      '/home',
+  super_admin: '/admin/dashboard',
+  default:     '/home',
 }
 
 const VerticalMenu = ({ scrollMenu }) => {
@@ -46,7 +44,7 @@ const VerticalMenu = ({ scrollMenu }) => {
   const ScrollWrapper = isBreakpointReached ? 'div' : PerfectScrollbar
 
   const role         = session?.user?.role ?? 'athlete'
-  const dashboardUrl = DASHBOARD_URL[role] ?? '/home'
+  const dashboardUrl = DASHBOARD_URL[role] ?? DASHBOARD_URL.default
 
   return (
     <ScrollWrapper
