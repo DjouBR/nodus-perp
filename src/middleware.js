@@ -9,60 +9,70 @@ const PUBLIC_ROUTES = [
   '/reset-password', '/verify-email', '/two-steps'
 ]
 
-const ALL_ROLES = ['super_admin', 'tenant_admin', 'coach', 'athlete', 'receptionist']
+const ALL_ROLES = [
+  'super_admin',
+  'tenant_admin',
+  'coach',
+  'academy_coach',
+  'receptionist',
+  'academy_athlete',
+  'athlete',
+]
 
 const ROUTE_PERMISSIONS = {
-  // ── Super Admin — escopo: gestão do SaaS, sem dados pessoais de atletas ──
-  '/admin':              ['super_admin'],
-  // Nota: super_admin usa /admin/tenants para ver dados operacionais dos tenants
-  // e NUNCA acessa /academy/settings, /coach/settings etc. diretamente.
 
-  // ── Tenant Admin ─────────────────────────────────────────────
-  '/academies':          ['super_admin', 'tenant_admin'],
-  '/coaches':            ['super_admin', 'tenant_admin'],
+  // ── SUPER ADMIN ───────────────────────────────────────────────
+  // Escopo exclusivo: gestão do SaaS, sem dados pessoais de usuários finais
+  '/admin':                       ['super_admin'],
 
-  // ── Coach + Tenant Admin ─────────────────────────────────────
-  '/reports':            ['tenant_admin', 'coach'],
-  '/planning':           ['tenant_admin', 'coach'],
-  '/sessions':           ['tenant_admin', 'coach'],
-  '/monitoring':         ['tenant_admin', 'coach', 'athlete'],
+  // ── ACADEMIA / EQUIPES (tenant_admin) ────────────────────────
+  '/academy':                     ['tenant_admin'],
 
-  // ── Operacional ─────────────────────────────────────────────
-  '/athletes':           ['tenant_admin', 'coach', 'receptionist'],
+  // ── COACH INDEPENDENTE ─────────────────────────────────
+  '/coach':                       ['coach'],
 
-  // ── Settings isolados por role (sem cross-access) ─────────────────
-  // super_admin gerencia OUTROS tenants via /admin — não via settings deles
-  '/admin/settings':        ['super_admin'],
-  '/academy/settings':      ['tenant_admin'],
-  '/coach/settings':        ['coach'],
-  '/athlete/settings':      ['athlete'],
-  '/receptionist/settings': ['receptionist'],
+  // ── TREINADOR DA ACADEMIA (academy_coach) ─────────────────
+  '/academy_coach':               ['academy_coach'],
 
-  // ── Todos os autenticados ─────────────────────────────────────
-  '/home':               ALL_ROLES,
-  '/profile':            ALL_ROLES,
-  '/daily-logs':         ['tenant_admin', 'coach', 'athlete'],
+  // ── RECEPCIONISTA ────────────────────────────────────
+  '/recepcionist':                ['receptionist'],
+
+  // ── ALUNO DA ACADEMIA (academy_athlete) ──────────────────
+  '/academy_athlete':             ['academy_athlete'],
+
+  // ── ATLETA INDEPENDENTE ───────────────────────────────
+  '/athlete':                     ['athlete'],
+
+  // ── ROTAS GLOBAIS (todos os autenticados) ─────────────────
+  '/home':                        ALL_ROLES,
+  '/profile':                     ALL_ROLES,
 }
 
+// Rota de destino após login por role
 export const getHomeByRole = role => {
   const homes = {
-    super_admin:          '/admin/dashboard',
-    tenant_admin:         '/home',
-    coach:                '/home',
-    athlete:              '/home',
-    receptionist:         '/home',
-    pending_onboarding:   '/onboarding'
+    super_admin:        '/home',
+    tenant_admin:       '/home',
+    coach:              '/home',
+    academy_coach:      '/home',
+    receptionist:       '/home',
+    academy_athlete:    '/home',
+    athlete:            '/home',
+    pending_onboarding: '/onboarding',
   }
   return homes[role] ?? '/home'
 }
 
+// Rota de configurações por role
 export const getSettingsByRole = role => {
   const map = {
-    super_admin:   '/admin/settings',
-    tenant_admin:  '/academy/settings',
-    coach:         '/coach/settings',
-    athlete:       '/athlete/settings',
-    receptionist:  '/receptionist/settings',
+    super_admin:     '/admin/settings',
+    tenant_admin:    '/academy/config',
+    coach:           '/coach/config',
+    academy_coach:   '/academy_coach/config',
+    receptionist:    '/recepcionist/config',
+    academy_athlete: '/academy_athlete/config',
+    athlete:         '/athlete/config',
   }
   return map[role] ?? '/profile'
 }
