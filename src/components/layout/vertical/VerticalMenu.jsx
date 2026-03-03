@@ -58,9 +58,7 @@ const VerticalMenu = ({ scrollMenu }) => {
         ═══════════════════════════════════════════════════════════════ */}
         {role === 'super_admin' && (
           <>
-            <MenuItem href='/home' icon={<i className='tabler-smart-home' />}>
-              Dashboard
-            </MenuItem>
+            <MenuItem href='/home' icon={<i className='tabler-smart-home' />}>Dashboard</MenuItem>
             <MenuSection label='Gestão'>
               <MenuItem href='/admin/clients' icon={<i className='tabler-building-community' />}>Clientes</MenuItem>
               <MenuItem href='/admin/crm' icon={<i className='tabler-address-book' />}>CRM</MenuItem>
@@ -87,9 +85,7 @@ const VerticalMenu = ({ scrollMenu }) => {
         ═══════════════════════════════════════════════════════════════ */}
         {role === 'tenant_admin' && (
           <>
-            <MenuItem href='/home' icon={<i className='tabler-smart-home' />}>
-              Dashboard
-            </MenuItem>
+            <MenuItem href='/home' icon={<i className='tabler-smart-home' />}>Dashboard</MenuItem>
             <MenuSection label='Cadastro'>
               <MenuItem href='/academy/coaches' icon={<i className='tabler-user-star' />}>Treinadores / Professores</MenuItem>
               <MenuItem href='/academy/athletes' icon={<i className='tabler-users' />}>Atletas / Alunos</MenuItem>
@@ -116,9 +112,7 @@ const VerticalMenu = ({ scrollMenu }) => {
         ═══════════════════════════════════════════════════════════════ */}
         {role === 'coach' && (
           <>
-            <MenuItem href='/home' icon={<i className='tabler-smart-home' />}>
-              Dashboard
-            </MenuItem>
+            <MenuItem href='/home' icon={<i className='tabler-smart-home' />}>Dashboard</MenuItem>
             <MenuSection label='Cadastro'>
               <MenuItem href='/coach/athletes' icon={<i className='tabler-users' />}>Atletas / Alunos</MenuItem>
             </MenuSection>
@@ -143,17 +137,26 @@ const VerticalMenu = ({ scrollMenu }) => {
         )}
 
         {/* ═══════════════════════════════════════════════════════════════
-            RECEPTIONIST — placeholder até ditar o menu
+            RECEPCIONISTA
         ═══════════════════════════════════════════════════════════════ */}
         {role === 'receptionist' && (
           <>
             <MenuItem href='/home' icon={<i className='tabler-smart-home' />}>Dashboard</MenuItem>
-            <MenuSection label='Recepção'>
-              <MenuItem href='/athletes' icon={<i className='tabler-users' />}>Atletas</MenuItem>
-              <MenuItem href='/checkin' icon={<i className='tabler-scan' />}>Check-in</MenuItem>
-              <MenuItem href='/payments' icon={<i className='tabler-cash' />}>Pagamentos</MenuItem>
+            <MenuSection label='Cadastro'>
+              <MenuItem href='/recepcionist/athletes' icon={<i className='tabler-users' />}>Atletas / Alunos</MenuItem>
             </MenuSection>
-            <MenuItem href='/receptionist/settings' icon={<i className='tabler-settings' />}>Configurações</MenuItem>
+            <MenuSection label='Sessões de Treino'>
+              <MenuItem href='/recepcionist/calendar' icon={<i className='tabler-calendar' />}>Agenda</MenuItem>
+              <MenuItem href='/recepcionist/checkin' icon={<i className='tabler-scan' />}>Check-in</MenuItem>
+            </MenuSection>
+            <MenuSection label='Financeiro'>
+              <MenuItem href='/recepcionist/payments' icon={<i className='tabler-cash' />}>Pagamentos</MenuItem>
+              <MenuItem href='/recepcionist/receipts' icon={<i className='tabler-receipt' />}>Comprovantes</MenuItem>
+            </MenuSection>
+            <MenuSection label='Diversos'>
+              <MenuItem href='/recepcionist/report' icon={<i className='tabler-chart-bar' />}>Relatórios</MenuItem>
+              <MenuItem href='/recepcionist/config' icon={<i className='tabler-settings' />}>Configurações</MenuItem>
+            </MenuSection>
           </>
         )}
 

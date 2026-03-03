@@ -25,31 +25,28 @@ const ROLE_LABELS = {
   athlete:      'Atleta',
 }
 
-// Rota de perfil por role
 const PROFILE_URL = {
-  super_admin:   '/admin/userprofile',
-  tenant_admin:  '/academy/userprofile',
-  coach:         '/coach/userprofile',
-  athlete:       '/profile',
-  receptionist:  '/profile',
+  super_admin:  '/admin/userprofile',
+  tenant_admin: '/academy/userprofile',
+  coach:        '/coach/userprofile',
+  receptionist: '/recepcionist/userprofile',
+  athlete:      '/profile',
 }
 
-// Rota de configurações por role
 const SETTINGS_URL = {
-  super_admin:   '/admin/settings',
-  tenant_admin:  '/academy/config',
-  coach:         '/coach/config',
-  athlete:       '/athlete/settings',
-  receptionist:  '/receptionist/settings',
+  super_admin:  '/admin/settings',
+  tenant_admin: '/academy/config',
+  coach:        '/coach/config',
+  receptionist: '/recepcionist/config',
+  athlete:      '/athlete/settings',
 }
 
-// Itens extras do dropdown por role
 const EXTRA_ITEMS = {
-  super_admin:   [],
-  tenant_admin:  [{ label: 'Mensagens', icon: 'tabler-message', url: '/academy/messages' }],
-  coach:         [{ label: 'Mensagens', icon: 'tabler-message', url: '/coach/messages' }],
-  athlete:       [],
-  receptionist:  [],
+  super_admin:  [],
+  tenant_admin: [{ label: 'Mensagens', icon: 'tabler-message', url: '/academy/messages' }],
+  coach:        [{ label: 'Mensagens', icon: 'tabler-message', url: '/coach/messages' }],
+  receptionist: [{ label: 'Mensagens', icon: 'tabler-message', url: '/recepcionist/messages' }],
+  athlete:      [],
 }
 
 const BadgeContentSpan = styled('span')({
@@ -65,7 +62,7 @@ function getInitials(name) {
   return name?.split(' ').slice(0, 2).map(n => n[0]).join('').toUpperCase() ?? '?'
 }
 
-const AVATAR_COLORS = ['#7367F0','#28C76F','#FF9F43','#00CFE8','#EA5455']
+const AVATAR_COLORS = ['#7367F0', '#28C76F', '#FF9F43', '#00CFE8', '#EA5455']
 function avatarColor(name) {
   return AVATAR_COLORS[(name?.charCodeAt(0) ?? 0) % AVATAR_COLORS.length]
 }
@@ -77,11 +74,11 @@ const UserDropdown = () => {
   const { settings } = useSettings()
   const { data: session } = useSession()
 
-  const user        = session?.user
-  const roleName    = ROLE_LABELS[user?.role] ?? user?.role ?? ''
-  const settingsUrl = SETTINGS_URL[user?.role] ?? '/profile'
-  const profileUrl  = PROFILE_URL[user?.role] ?? '/profile'
-  const extraItems  = EXTRA_ITEMS[user?.role] ?? []
+  const user       = session?.user
+  const roleName   = ROLE_LABELS[user?.role] ?? user?.role ?? ''
+  const profileUrl = PROFILE_URL[user?.role] ?? '/profile'
+  const settingsUrl= SETTINGS_URL[user?.role] ?? '/profile'
+  const extraItems = EXTRA_ITEMS[user?.role] ?? []
 
   const handleDropdownOpen = () => setOpen(o => !o)
 
@@ -133,7 +130,6 @@ const UserDropdown = () => {
               <ClickAwayListener onClickAway={e => handleDropdownClose(e)}>
                 <MenuList>
 
-                  {/* Cabeçalho */}
                   <div className='flex items-center plb-2 pli-6 gap-2' tabIndex={-1}>
                     <AvatarEl size={40} />
                     <div className='flex items-start flex-col'>
@@ -149,13 +145,11 @@ const UserDropdown = () => {
 
                   <Divider className='mlb-1' />
 
-                  {/* Meu Perfil */}
                   <MenuItem className='mli-2 gap-3' onClick={e => handleDropdownClose(e, profileUrl)}>
                     <i className='tabler-user' />
                     <Typography color='text.primary'>Meu Perfil</Typography>
                   </MenuItem>
 
-                  {/* Itens extras por role */}
                   {extraItems.map(item => (
                     <MenuItem key={item.url} className='mli-2 gap-3' onClick={e => handleDropdownClose(e, item.url)}>
                       <i className={item.icon} />
@@ -163,7 +157,6 @@ const UserDropdown = () => {
                     </MenuItem>
                   ))}
 
-                  {/* Configurações */}
                   <MenuItem className='mli-2 gap-3' onClick={e => handleDropdownClose(e, settingsUrl)}>
                     <i className='tabler-settings' />
                     <Typography color='text.primary'>Configurações</Typography>
@@ -171,7 +164,6 @@ const UserDropdown = () => {
 
                   <Divider className='mlb-1' />
 
-                  {/* Logout */}
                   <div className='flex items-center plb-2 pli-3'>
                     <Button fullWidth variant='contained' color='error' size='small'
                       endIcon={<i className='tabler-logout' />}
