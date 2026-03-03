@@ -28,13 +28,6 @@ const RenderExpandIcon = ({ open, transitionDuration }) => (
   </StyledVerticalNavExpandIcon>
 )
 
-// Apenas super_admin tem dashboard próprio.
-// Todos os outros roles usam /home, que já renderiza conteúdo por role.
-const DASHBOARD_URL = {
-  super_admin: '/admin/dashboard',
-  default:     '/home',
-}
-
 const VerticalMenu = ({ scrollMenu }) => {
   const theme = useTheme()
   const verticalNavOptions = useVerticalNav()
@@ -43,8 +36,7 @@ const VerticalMenu = ({ scrollMenu }) => {
   const { isBreakpointReached, transitionDuration } = verticalNavOptions
   const ScrollWrapper = isBreakpointReached ? 'div' : PerfectScrollbar
 
-  const role         = session?.user?.role ?? 'athlete'
-  const dashboardUrl = DASHBOARD_URL[role] ?? DASHBOARD_URL.default
+  const role = session?.user?.role ?? 'athlete'
 
   return (
     <ScrollWrapper
@@ -66,7 +58,7 @@ const VerticalMenu = ({ scrollMenu }) => {
         ═══════════════════════════════════════════════════════════════ */}
         {role === 'super_admin' && (
           <>
-            <MenuItem href={dashboardUrl} icon={<i className='tabler-smart-home' />}>
+            <MenuItem href='/home' icon={<i className='tabler-smart-home' />}>
               Dashboard
             </MenuItem>
             <MenuSection label='Gestão'>
@@ -95,7 +87,7 @@ const VerticalMenu = ({ scrollMenu }) => {
         ═══════════════════════════════════════════════════════════════ */}
         {role === 'tenant_admin' && (
           <>
-            <MenuItem href={dashboardUrl} icon={<i className='tabler-smart-home' />}>
+            <MenuItem href='/home' icon={<i className='tabler-smart-home' />}>
               Dashboard
             </MenuItem>
             <MenuSection label='Cadastro'>
@@ -124,7 +116,7 @@ const VerticalMenu = ({ scrollMenu }) => {
         ═══════════════════════════════════════════════════════════════ */}
         {role === 'coach' && (
           <>
-            <MenuItem href={dashboardUrl} icon={<i className='tabler-smart-home' />}>
+            <MenuItem href='/home' icon={<i className='tabler-smart-home' />}>
               Dashboard
             </MenuItem>
             <MenuSection label='Cadastro'>
@@ -155,7 +147,7 @@ const VerticalMenu = ({ scrollMenu }) => {
         ═══════════════════════════════════════════════════════════════ */}
         {role === 'receptionist' && (
           <>
-            <MenuItem href={dashboardUrl} icon={<i className='tabler-smart-home' />}>Dashboard</MenuItem>
+            <MenuItem href='/home' icon={<i className='tabler-smart-home' />}>Dashboard</MenuItem>
             <MenuSection label='Recepção'>
               <MenuItem href='/athletes' icon={<i className='tabler-users' />}>Atletas</MenuItem>
               <MenuItem href='/checkin' icon={<i className='tabler-scan' />}>Check-in</MenuItem>
@@ -170,7 +162,7 @@ const VerticalMenu = ({ scrollMenu }) => {
         ═══════════════════════════════════════════════════════════════ */}
         {role === 'athlete' && (
           <>
-            <MenuItem href={dashboardUrl} icon={<i className='tabler-smart-home' />}>Dashboard</MenuItem>
+            <MenuItem href='/home' icon={<i className='tabler-smart-home' />}>Dashboard</MenuItem>
             <MenuSection label='Meu Treino'>
               <MenuItem href='/my-training' icon={<i className='tabler-barbell' />}>Meu Plano</MenuItem>
               <MenuItem href='/daily-logs' icon={<i className='tabler-clipboard-text' />}>Daily Log</MenuItem>
