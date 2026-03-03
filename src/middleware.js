@@ -19,33 +19,44 @@ const ALL_ROLES = [
   'athlete',
 ]
 
+const STAFF_ROLES  = ['super_admin', 'tenant_admin', 'coach', 'academy_coach', 'receptionist']
+const COACH_ROLES  = ['tenant_admin', 'coach', 'academy_coach']
+const ATHLETE_ROLES = ['academy_athlete', 'athlete']
+
 const ROUTE_PERMISSIONS = {
 
-  // ── SUPER ADMIN ───────────────────────────────────────────────
-  // Escopo exclusivo: gestão do SaaS, sem dados pessoais de usuários finais
-  '/admin':                       ['super_admin'],
+  // ──────────────────────────────────────────────────
+  // ROTAS EXCLUSIVAS POR ROLE (prefixo = role)
+  // ──────────────────────────────────────────────────
+  '/admin':            ['super_admin'],
+  '/academy':          ['tenant_admin'],
+  '/coach':            ['coach'],
+  '/academy_coach':    ['academy_coach'],
+  '/recepcionist':     ['receptionist'],
+  '/academy_athlete':  ['academy_athlete'],
+  '/athlete':          ['athlete'],
 
-  // ── ACADEMIA / EQUIPES (tenant_admin) ────────────────────────
-  '/academy':                     ['tenant_admin'],
+  // ──────────────────────────────────────────────────
+  // ROTAS LEGADAS — páginas existentes antes da divisão por role
+  // Mantidas para não quebrar páginas já construídas
+  // ──────────────────────────────────────────────────
+  '/academies':        ['super_admin', 'tenant_admin'],
+  '/coaches':          ['super_admin', 'tenant_admin'],
+  '/athletes':         ['tenant_admin', 'coach', 'academy_coach', 'receptionist'],
+  '/monitoring':       [...COACH_ROLES, ...ATHLETE_ROLES],
+  '/planning':         COACH_ROLES,
+  '/sessions':         [...COACH_ROLES, 'receptionist'],
+  '/reports':          STAFF_ROLES,
+  '/settings':         ALL_ROLES,
+  '/receptionist':     ['receptionist'],
+  '/daily-logs':       [...COACH_ROLES, ...ATHLETE_ROLES],
 
-  // ── COACH INDEPENDENTE ─────────────────────────────────
-  '/coach':                       ['coach'],
-
-  // ── TREINADOR DA ACADEMIA (academy_coach) ─────────────────
-  '/academy_coach':               ['academy_coach'],
-
-  // ── RECEPCIONISTA ────────────────────────────────────
-  '/recepcionist':                ['receptionist'],
-
-  // ── ALUNO DA ACADEMIA (academy_athlete) ──────────────────
-  '/academy_athlete':             ['academy_athlete'],
-
-  // ── ATLETA INDEPENDENTE ───────────────────────────────
-  '/athlete':                     ['athlete'],
-
-  // ── ROTAS GLOBAIS (todos os autenticados) ─────────────────
-  '/home':                        ALL_ROLES,
-  '/profile':                     ALL_ROLES,
+  // ──────────────────────────────────────────────────
+  // ROTAS GLOBAIS (todos os autenticados)
+  // ──────────────────────────────────────────────────
+  '/home':             ALL_ROLES,
+  '/profile':          ALL_ROLES,
+  '/onboarding':       ['pending_onboarding'],
 }
 
 // Rota de destino após login por role
@@ -81,14 +92,15 @@ export default withAuth(
   function middleware(req) {
     const { pathname } = req.nextUrl
     const token = req.nextauth?.token
-    const role = token?.role
+    const role  = token?.role
 
     if (PUBLIC_ROUTES.some(r => pathname.startsWith(r))) return NextResponse.next()
     if (!token) return NextResponse.redirect(new URL('/login', req.url))
 
-    const matchedRoute = Object.keys(ROUTE_PERMISSIONS).find(route =>
-      pathname.startsWith(route)
-    )
+    // Obtém a rota mais específica que bate com o pathname
+    const matchedRoute = Object.keys(ROUTE_PERMISSIONS)
+      .filter(route => pathname.startsWith(route))
+      .sort((a, b) => b.length - a.length)[0] // mais específica vence
 
     if (matchedRoute) {
       const allowedRoles = ROUTE_PERMISSIONS[matchedRoute]
