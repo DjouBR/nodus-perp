@@ -28,6 +28,15 @@ const RenderExpandIcon = ({ open, transitionDuration }) => (
   </StyledVerticalNavExpandIcon>
 )
 
+// Dashboard por role — cada role tem seu próprio dashboard
+const DASHBOARD_URL = {
+  super_admin:  '/admin/dashboard',
+  tenant_admin: '/academy/dashboard',
+  coach:        '/coach/dashboard',
+  receptionist: '/home',
+  athlete:      '/home',
+}
+
 const VerticalMenu = ({ scrollMenu }) => {
   const theme = useTheme()
   const verticalNavOptions = useVerticalNav()
@@ -36,7 +45,8 @@ const VerticalMenu = ({ scrollMenu }) => {
   const { isBreakpointReached, transitionDuration } = verticalNavOptions
   const ScrollWrapper = isBreakpointReached ? 'div' : PerfectScrollbar
 
-  const role = session?.user?.role ?? 'athlete'
+  const role         = session?.user?.role ?? 'athlete'
+  const dashboardUrl = DASHBOARD_URL[role] ?? '/home'
 
   return (
     <ScrollWrapper
@@ -58,7 +68,7 @@ const VerticalMenu = ({ scrollMenu }) => {
         ═══════════════════════════════════════════════════════════════ */}
         {role === 'super_admin' && (
           <>
-            <MenuItem href='/admin/dashboard' icon={<i className='tabler-smart-home' />}>
+            <MenuItem href={dashboardUrl} icon={<i className='tabler-smart-home' />}>
               Dashboard
             </MenuItem>
             <MenuSection label='Gestão'>
@@ -87,26 +97,22 @@ const VerticalMenu = ({ scrollMenu }) => {
         ═══════════════════════════════════════════════════════════════ */}
         {role === 'tenant_admin' && (
           <>
-            <MenuItem href='/academy/dashboard' icon={<i className='tabler-smart-home' />}>
+            <MenuItem href={dashboardUrl} icon={<i className='tabler-smart-home' />}>
               Dashboard
             </MenuItem>
-
             <MenuSection label='Cadastro'>
               <MenuItem href='/academy/coaches' icon={<i className='tabler-user-star' />}>Treinadores / Professores</MenuItem>
               <MenuItem href='/academy/athletes' icon={<i className='tabler-users' />}>Atletas / Alunos</MenuItem>
               <MenuItem href='/academy/recepcionist' icon={<i className='tabler-headset' />}>Recepção</MenuItem>
             </MenuSection>
-
             <MenuSection label='Sessões de Treino'>
               <MenuItem href='/academy/calendar' icon={<i className='tabler-calendar' />}>Agenda</MenuItem>
               <MenuItem href='/academy/sessionshistory' icon={<i className='tabler-history' />}>Histórico de Treinos</MenuItem>
             </MenuSection>
-
             <MenuSection label='Monitoramento'>
               <MenuItem href='/academy/tvscreen' icon={<i className='tabler-device-tv' />}>Exibição TV</MenuItem>
               <MenuItem href='/academy/tvoptions' icon={<i className='tabler-adjustments-horizontal' />}>Opções de Exibição</MenuItem>
             </MenuSection>
-
             <MenuSection label='Diversos'>
               <MenuItem href='/academy/report' icon={<i className='tabler-chart-bar' />}>Relatórios</MenuItem>
               <MenuItem href='/academy/gamification' icon={<i className='tabler-trophy' />}>Gamificação</MenuItem>
@@ -116,24 +122,33 @@ const VerticalMenu = ({ scrollMenu }) => {
         )}
 
         {/* ═══════════════════════════════════════════════════════════════
-            COACH — placeholder até ditar o menu
+            COACH INDEPENDENTE
         ═══════════════════════════════════════════════════════════════ */}
         {role === 'coach' && (
           <>
-            <MenuItem href='/home' icon={<i className='tabler-smart-home' />}>Dashboard</MenuItem>
-            <MenuSection label='Atletas'>
-              <MenuItem href='/athletes' icon={<i className='tabler-users' />}>Meus Atletas</MenuItem>
+            <MenuItem href={dashboardUrl} icon={<i className='tabler-smart-home' />}>
+              Dashboard
+            </MenuItem>
+            <MenuSection label='Cadastro'>
+              <MenuItem href='/coach/athletes' icon={<i className='tabler-users' />}>Atletas / Alunos</MenuItem>
             </MenuSection>
-            <MenuSection label='Treino'>
-              <MenuItem href='/sessions' icon={<i className='tabler-activity' />}>Sessões</MenuItem>
-              <MenuItem href='/planning' icon={<i className='tabler-calendar-stats' />}>Planejamento</MenuItem>
-              <MenuItem href='/daily-logs' icon={<i className='tabler-clipboard-text' />}>Daily Logs</MenuItem>
+            <MenuSection label='Sessões de Treino'>
+              <MenuItem href='/coach/calendar' icon={<i className='tabler-calendar' />}>Agenda</MenuItem>
+              <MenuItem href='/coach/sessionshistory' icon={<i className='tabler-history' />}>Histórico de Treinos</MenuItem>
+            </MenuSection>
+            <MenuSection label='Prescrição de Treino'>
+              <MenuItem href='/coach/planning' icon={<i className='tabler-calendar-stats' />}>Planejamento</MenuItem>
+              <MenuItem href='/coach/prescription' icon={<i className='tabler-clipboard-text' />}>Prescrição</MenuItem>
             </MenuSection>
             <MenuSection label='Monitoramento'>
-              <MenuItem href='/monitoring' icon={<i className='tabler-heart-rate-monitor' />}>Ao Vivo</MenuItem>
-              <MenuItem href='/reports' icon={<i className='tabler-chart-bar' />}>Relatórios</MenuItem>
+              <MenuItem href='/coach/monitoring' icon={<i className='tabler-heart-rate-monitor' />}>Tempo Real</MenuItem>
+              <MenuItem href='/coach/monitoringoptions' icon={<i className='tabler-adjustments-horizontal' />}>Opções de Exibição</MenuItem>
             </MenuSection>
-            <MenuItem href='/coach/settings' icon={<i className='tabler-settings' />}>Configurações</MenuItem>
+            <MenuSection label='Diversos'>
+              <MenuItem href='/coach/report' icon={<i className='tabler-chart-bar' />}>Relatórios</MenuItem>
+              <MenuItem href='/coach/gamification' icon={<i className='tabler-trophy' />}>Gamificação</MenuItem>
+              <MenuItem href='/coach/config' icon={<i className='tabler-settings' />}>Configurações</MenuItem>
+            </MenuSection>
           </>
         )}
 
@@ -142,7 +157,7 @@ const VerticalMenu = ({ scrollMenu }) => {
         ═══════════════════════════════════════════════════════════════ */}
         {role === 'receptionist' && (
           <>
-            <MenuItem href='/home' icon={<i className='tabler-smart-home' />}>Dashboard</MenuItem>
+            <MenuItem href={dashboardUrl} icon={<i className='tabler-smart-home' />}>Dashboard</MenuItem>
             <MenuSection label='Recepção'>
               <MenuItem href='/athletes' icon={<i className='tabler-users' />}>Atletas</MenuItem>
               <MenuItem href='/checkin' icon={<i className='tabler-scan' />}>Check-in</MenuItem>
@@ -157,7 +172,7 @@ const VerticalMenu = ({ scrollMenu }) => {
         ═══════════════════════════════════════════════════════════════ */}
         {role === 'athlete' && (
           <>
-            <MenuItem href='/home' icon={<i className='tabler-smart-home' />}>Dashboard</MenuItem>
+            <MenuItem href={dashboardUrl} icon={<i className='tabler-smart-home' />}>Dashboard</MenuItem>
             <MenuSection label='Meu Treino'>
               <MenuItem href='/my-training' icon={<i className='tabler-barbell' />}>Meu Plano</MenuItem>
               <MenuItem href='/daily-logs' icon={<i className='tabler-clipboard-text' />}>Daily Log</MenuItem>
