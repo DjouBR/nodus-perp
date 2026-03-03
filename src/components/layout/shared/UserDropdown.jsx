@@ -18,35 +18,39 @@ import Button from '@mui/material/Button'
 import { useSettings } from '@core/hooks/useSettings'
 
 const ROLE_LABELS = {
-  super_admin:  'Super Admin',
-  tenant_admin: 'Admin Academia',
-  coach:        'Coach',
-  receptionist: 'Recepcionista',
-  athlete:      'Atleta',
+  super_admin:   'Super Admin',
+  tenant_admin:  'Admin Academia',
+  coach:         'Coach',
+  academy_coach: 'Treinador',
+  receptionist:  'Recepcionista',
+  athlete:       'Atleta',
 }
 
 const PROFILE_URL = {
-  super_admin:  '/admin/userprofile',
-  tenant_admin: '/academy/userprofile',
-  coach:        '/coach/userprofile',
-  receptionist: '/recepcionist/userprofile',
-  athlete:      '/profile',
+  super_admin:   '/admin/userprofile',
+  tenant_admin:  '/academy/userprofile',
+  coach:         '/coach/userprofile',
+  academy_coach: '/academy_coach/userprofile',
+  receptionist:  '/recepcionist/userprofile',
+  athlete:       '/profile',
 }
 
 const SETTINGS_URL = {
-  super_admin:  '/admin/settings',
-  tenant_admin: '/academy/config',
-  coach:        '/coach/config',
-  receptionist: '/recepcionist/config',
-  athlete:      '/athlete/settings',
+  super_admin:   '/admin/settings',
+  tenant_admin:  '/academy/config',
+  coach:         '/coach/config',
+  academy_coach: '/academy_coach/config',
+  receptionist:  '/recepcionist/config',
+  athlete:       '/athlete/settings',
 }
 
 const EXTRA_ITEMS = {
-  super_admin:  [],
-  tenant_admin: [{ label: 'Mensagens', icon: 'tabler-message', url: '/academy/messages' }],
-  coach:        [{ label: 'Mensagens', icon: 'tabler-message', url: '/coach/messages' }],
-  receptionist: [{ label: 'Mensagens', icon: 'tabler-message', url: '/recepcionist/messages' }],
-  athlete:      [],
+  super_admin:   [],
+  tenant_admin:  [{ label: 'Mensagens', icon: 'tabler-message', url: '/academy/messages' }],
+  coach:         [{ label: 'Mensagens', icon: 'tabler-message', url: '/coach/messages' }],
+  academy_coach: [{ label: 'Mensagens', icon: 'tabler-message', url: '/academy_coach/messages' }],
+  receptionist:  [{ label: 'Mensagens', icon: 'tabler-message', url: '/recepcionist/messages' }],
+  athlete:       [],
 }
 
 const BadgeContentSpan = styled('span')({
@@ -74,11 +78,11 @@ const UserDropdown = () => {
   const { settings } = useSettings()
   const { data: session } = useSession()
 
-  const user       = session?.user
-  const roleName   = ROLE_LABELS[user?.role] ?? user?.role ?? ''
-  const profileUrl = PROFILE_URL[user?.role] ?? '/profile'
-  const settingsUrl= SETTINGS_URL[user?.role] ?? '/profile'
-  const extraItems = EXTRA_ITEMS[user?.role] ?? []
+  const user        = session?.user
+  const roleName    = ROLE_LABELS[user?.role]   ?? user?.role ?? ''
+  const profileUrl  = PROFILE_URL[user?.role]   ?? '/profile'
+  const settingsUrl = SETTINGS_URL[user?.role]  ?? '/profile'
+  const extraItems  = EXTRA_ITEMS[user?.role]   ?? []
 
   const handleDropdownOpen = () => setOpen(o => !o)
 

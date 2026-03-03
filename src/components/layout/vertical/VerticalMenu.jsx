@@ -91,6 +91,10 @@ const VerticalMenu = ({ scrollMenu }) => {
               <MenuItem href='/academy/athletes' icon={<i className='tabler-users' />}>Atletas / Alunos</MenuItem>
               <MenuItem href='/academy/recepcionist' icon={<i className='tabler-headset' />}>Recepção</MenuItem>
             </MenuSection>
+            <MenuSection label='Financeiro'>
+              <MenuItem href='/academy/financial' icon={<i className='tabler-chart-pie' />}>Dashboard</MenuItem>
+              <MenuItem href='/academy/cashflow' icon={<i className='tabler-cash' />}>Receitas / Despesas</MenuItem>
+            </MenuSection>
             <MenuSection label='Sessões de Treino'>
               <MenuItem href='/academy/calendar' icon={<i className='tabler-calendar' />}>Agenda</MenuItem>
               <MenuItem href='/academy/sessionshistory' icon={<i className='tabler-history' />}>Histórico de Treinos</MenuItem>
@@ -113,35 +117,58 @@ const VerticalMenu = ({ scrollMenu }) => {
         {role === 'coach' && (
           <>
             <MenuItem href='/home' icon={<i className='tabler-smart-home' />}>Dashboard</MenuItem>
-
             <MenuSection label='Cadastro'>
               <MenuItem href='/coach/athletes' icon={<i className='tabler-users' />}>Atletas / Alunos</MenuItem>
             </MenuSection>
-
             <MenuSection label='Financeiro'>
               <MenuItem href='/coach/financial' icon={<i className='tabler-chart-pie' />}>Dashboard</MenuItem>
               <MenuItem href='/coach/cashflow' icon={<i className='tabler-cash' />}>Receitas / Despesas</MenuItem>
             </MenuSection>
-
             <MenuSection label='Sessões de Treino'>
               <MenuItem href='/coach/calendar' icon={<i className='tabler-calendar' />}>Agenda</MenuItem>
               <MenuItem href='/coach/sessionshistory' icon={<i className='tabler-history' />}>Histórico de Treinos</MenuItem>
             </MenuSection>
-
             <MenuSection label='Prescrição de Treino'>
               <MenuItem href='/coach/planning' icon={<i className='tabler-calendar-stats' />}>Planejamento</MenuItem>
               <MenuItem href='/coach/prescription' icon={<i className='tabler-clipboard-text' />}>Prescrição</MenuItem>
             </MenuSection>
-
             <MenuSection label='Monitoramento'>
               <MenuItem href='/coach/monitoring' icon={<i className='tabler-heart-rate-monitor' />}>Tempo Real</MenuItem>
               <MenuItem href='/coach/monitoringoptions' icon={<i className='tabler-adjustments-horizontal' />}>Opções de Exibição</MenuItem>
             </MenuSection>
-
             <MenuSection label='Diversos'>
               <MenuItem href='/coach/report' icon={<i className='tabler-chart-bar' />}>Relatórios</MenuItem>
               <MenuItem href='/coach/gamification' icon={<i className='tabler-trophy' />}>Gamificação</MenuItem>
               <MenuItem href='/coach/config' icon={<i className='tabler-settings' />}>Configurações</MenuItem>
+            </MenuSection>
+          </>
+        )}
+
+        {/* ═══════════════════════════════════════════════════════════════
+            ACADEMY COACH (funcionário da academia)
+        ═══════════════════════════════════════════════════════════════ */}
+        {role === 'academy_coach' && (
+          <>
+            <MenuItem href='/home' icon={<i className='tabler-smart-home' />}>Dashboard</MenuItem>
+            <MenuSection label='Cadastro'>
+              <MenuItem href='/academy_coach/athletes' icon={<i className='tabler-users' />}>Atletas / Alunos</MenuItem>
+            </MenuSection>
+            <MenuSection label='Sessões de Treino'>
+              <MenuItem href='/academy_coach/calendar' icon={<i className='tabler-calendar' />}>Agenda</MenuItem>
+              <MenuItem href='/academy_coach/sessionshistory' icon={<i className='tabler-history' />}>Histórico de Treinos</MenuItem>
+            </MenuSection>
+            <MenuSection label='Prescrição de Treino'>
+              <MenuItem href='/academy_coach/planning' icon={<i className='tabler-calendar-stats' />}>Planejamento</MenuItem>
+              <MenuItem href='/academy_coach/prescription' icon={<i className='tabler-clipboard-text' />}>Prescrição</MenuItem>
+            </MenuSection>
+            <MenuSection label='Monitoramento'>
+              <MenuItem href='/academy_coach/monitoring' icon={<i className='tabler-heart-rate-monitor' />}>Tempo Real</MenuItem>
+              <MenuItem href='/academy_coach/monitoringoptions' icon={<i className='tabler-adjustments-horizontal' />}>Opções de Exibição</MenuItem>
+            </MenuSection>
+            <MenuSection label='Diversos'>
+              <MenuItem href='/academy_coach/report' icon={<i className='tabler-chart-bar' />}>Relatórios</MenuItem>
+              <MenuItem href='/academy_coach/gamification' icon={<i className='tabler-trophy' />}>Gamificação</MenuItem>
+              <MenuItem href='/academy_coach/config' icon={<i className='tabler-settings' />}>Configurações</MenuItem>
             </MenuSection>
           </>
         )}
