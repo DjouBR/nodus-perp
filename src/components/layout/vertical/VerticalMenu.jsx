@@ -198,21 +198,46 @@ const VerticalMenu = ({ scrollMenu }) => {
         )}
 
         {/* ═══════════════════════════════════════════════════════════════
-            ATHLETE — placeholder até ditar o menu
+            ALUNO DA ACADEMIA (academy_athlete)
+        ═══════════════════════════════════════════════════════════════ */}
+        {role === 'academy_athlete' && (
+          <>
+            <MenuItem href='/home' icon={<i className='tabler-smart-home' />}>Início</MenuItem>
+            <MenuSection label='Treino'>
+              <MenuItem href='/academy_athlete/monitoring' icon={<i className='tabler-heart-rate-monitor' />}>Monitoramento</MenuItem>
+              <MenuItem href='/academy_athlete/prescription' icon={<i className='tabler-clipboard-text' />}>Meu Treino</MenuItem>
+              <MenuItem href='/academy_athlete/preworkout' icon={<i className='tabler-bolt' />}>Pré Treino</MenuItem>
+              <MenuItem href='/academy_athlete/postworkout' icon={<i className='tabler-moon' />}>Pós Treino</MenuItem>
+            </MenuSection>
+            <MenuSection label='Histórico'>
+              <MenuItem href='/academy_athlete/history' icon={<i className='tabler-history' />}>Histórico de Treinos</MenuItem>
+              <MenuItem href='/academy_athlete/evolution' icon={<i className='tabler-chart-line' />}>Minha Evolução</MenuItem>
+            </MenuSection>
+            <MenuSection label='Diversos'>
+              <MenuItem href='/academy_athlete/config' icon={<i className='tabler-settings' />}>Configurações</MenuItem>
+            </MenuSection>
+          </>
+        )}
+
+        {/* ═══════════════════════════════════════════════════════════════
+            ATLETA INDEPENDENTE (athlete)
         ═══════════════════════════════════════════════════════════════ */}
         {role === 'athlete' && (
           <>
-            <MenuItem href='/home' icon={<i className='tabler-smart-home' />}>Dashboard</MenuItem>
-            <MenuSection label='Meu Treino'>
-              <MenuItem href='/my-training' icon={<i className='tabler-barbell' />}>Meu Plano</MenuItem>
-              <MenuItem href='/daily-logs' icon={<i className='tabler-clipboard-text' />}>Daily Log</MenuItem>
-              <MenuItem href='/my-history' icon={<i className='tabler-history' />}>Meu Histórico</MenuItem>
+            <MenuItem href='/home' icon={<i className='tabler-smart-home' />}>Início</MenuItem>
+            <MenuSection label='Treino'>
+              <MenuItem href='/athlete/monitoring' icon={<i className='tabler-heart-rate-monitor' />}>Monitoramento</MenuItem>
+              <MenuItem href='/athlete/prescription' icon={<i className='tabler-clipboard-text' />}>Meu Treino</MenuItem>
+              <MenuItem href='/athlete/preworkout' icon={<i className='tabler-bolt' />}>Pré Treino</MenuItem>
+              <MenuItem href='/athlete/postworkout' icon={<i className='tabler-moon' />}>Pós Treino</MenuItem>
             </MenuSection>
-            <MenuSection label='Evolução'>
-              <MenuItem href='/my-stats' icon={<i className='tabler-chart-line' />}>Minha Evolução</MenuItem>
-              <MenuItem href='/gamification' icon={<i className='tabler-trophy' />}>Ranking e Badges</MenuItem>
+            <MenuSection label='Histórico'>
+              <MenuItem href='/athlete/history' icon={<i className='tabler-history' />}>Histórico de Treinos</MenuItem>
+              <MenuItem href='/athlete/evolution' icon={<i className='tabler-chart-line' />}>Minha Evolução</MenuItem>
             </MenuSection>
-            <MenuItem href='/athlete/settings' icon={<i className='tabler-settings' />}>Configurações</MenuItem>
+            <MenuSection label='Diversos'>
+              <MenuItem href='/athlete/config' icon={<i className='tabler-settings' />}>Configurações</MenuItem>
+            </MenuSection>
           </>
         )}
 
