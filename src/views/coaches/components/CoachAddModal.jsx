@@ -4,8 +4,8 @@ import { useState } from 'react'
 import { useSession } from 'next-auth/react'
 
 const INITIAL = {
-  name: '', email: '', password: '', type: 'academy_coach',
-  specialty: '', phone: '', is_active: true
+  name: '', email: '', password: '', type: 'academy',
+  specialty: '', phone: '',
 }
 
 export default function CoachAddModal({ onClose, onSuccess }) {
@@ -20,7 +20,11 @@ export default function CoachAddModal({ onClose, onSuccess }) {
     e.preventDefault()
     setError('')
     if (!form.name || !form.email || !form.password) {
-      setError('Nome, email e senha são obrigatórios.')
+      setError('Nome, email e senha s\u00e3o obrigat\u00f3rios.')
+      return
+    }
+    if (form.password.length < 6) {
+      setError('A senha deve ter no m\u00ednimo 6 caracteres.')
       return
     }
     setLoading(true)
@@ -28,7 +32,7 @@ export default function CoachAddModal({ onClose, onSuccess }) {
       const res = await fetch('/api/coaches', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ ...form, tenant_id: session?.user?.tenant_id })
+        body: JSON.stringify({ ...form, tenant_id: session?.user?.tenant_id }),
       })
       const json = await res.json()
       if (!res.ok) throw new Error(json.error ?? 'Erro ao cadastrar')
@@ -42,112 +46,79 @@ export default function CoachAddModal({ onClose, onSuccess }) {
 
   return (
     <div className='fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4'>
-      <div className='w-full max-w-lg rounded-2xl bg-backgroundPaper shadow-xl'>
-        <div className='flex items-center justify-between border-b px-6 py-4'>
-          <h2 className='text-lg font-semibold'>Novo Treinador / Coach</h2>
-          <button onClick={onClose} className='text-textSecondary hover:text-textPrimary'>
+      <div className='w-full max-w-lg rounded-2xl shadow-xl' style={{ backgroundColor: 'var(--mui-palette-background-paper)' }}>
+        {/* Header */}
+        <div className='flex items-center justify-between px-6 py-4' style={{ borderBottom: '1px solid var(--mui-palette-divider)' }}>
+          <h2 className='text-lg font-semibold'>Novo Coach / Treinador</h2>
+          <button onClick={onClose} className='rounded-lg p-1 hover:bg-action-hover'>
             <i className='tabler-x text-xl' />
           </button>
         </div>
 
         <form onSubmit={handleSubmit} className='flex flex-col gap-4 p-6'>
           {error && (
-            <div className='rounded-lg bg-error/10 px-4 py-2 text-sm text-error'>{error}</div>
+            <div className='flex items-center gap-2 rounded-lg px-4 py-2 text-sm' style={{ backgroundColor: 'rgb(var(--mui-palette-error-mainChannel)/0.1)', color: 'var(--mui-palette-error-main)' }}>
+              <i className='tabler-alert-circle text-base' />{error}
+            </div>
           )}
 
           <div className='grid grid-cols-2 gap-4'>
+            {/* Nome */}
             <div className='col-span-2'>
               <label className='mb-1 block text-sm font-medium'>Nome completo *</label>
-              <input
-                type='text'
-                value={form.name}
-                onChange={e => set('name', e.target.value)}
+              <input type='text' value={form.name} onChange={e => set('name', e.target.value)}
                 className='w-full rounded-lg border bg-background px-3 py-2 text-sm outline-none focus:border-primary'
-                placeholder='Ex: Carlos Souza'
-              />
+                placeholder='Ex: Carlos Souza' />
             </div>
 
+            {/* Email */}
             <div>
               <label className='mb-1 block text-sm font-medium'>Email *</label>
-              <input
-                type='email'
-                value={form.email}
-                onChange={e => set('email', e.target.value)}
+              <input type='email' value={form.email} onChange={e => set('email', e.target.value)}
                 className='w-full rounded-lg border bg-background px-3 py-2 text-sm outline-none focus:border-primary'
-                placeholder='email@exemplo.com'
-              />
+                placeholder='email@exemplo.com' />
             </div>
 
+            {/* Senha */}
             <div>
               <label className='mb-1 block text-sm font-medium'>Senha *</label>
-              <input
-                type='password'
-                value={form.password}
-                onChange={e => set('password', e.target.value)}
+              <input type='password' value={form.password} onChange={e => set('password', e.target.value)}
                 className='w-full rounded-lg border bg-background px-3 py-2 text-sm outline-none focus:border-primary'
-                placeholder='Mínimo 6 caracteres'
-              />
+                placeholder='M\u00ednimo 6 caracteres' />
             </div>
 
+            {/* Tipo */}
             <div>
-              <label className='mb-1 block text-sm font-medium'>Tipo</label>
-              <select
-                value={form.type}
-                onChange={e => set('type', e.target.value)}
-                className='w-full rounded-lg border bg-background px-3 py-2 text-sm outline-none focus:border-primary'
-              >
-                <option value='academy_coach'>Funcionário da Academia</option>
-                <option value='coach'>Independente</option>
+              <label className='mb-1 block text-sm font-medium'>Tipo de v\u00ednculo</label>
+              <select value={form.type} onChange={e => set('type', e.target.value)}
+                className='w-full rounded-lg border bg-background px-3 py-2 text-sm outline-none focus:border-primary'>
+                <option value='academy'>Funcion\u00e1rio da Academia</option>
+                <option value='independent'>Independente</option>
               </select>
             </div>
 
+            {/* Telefone */}
             <div>
               <label className='mb-1 block text-sm font-medium'>Telefone</label>
-              <input
-                type='text'
-                value={form.phone}
-                onChange={e => set('phone', e.target.value)}
+              <input type='text' value={form.phone} onChange={e => set('phone', e.target.value)}
                 className='w-full rounded-lg border bg-background px-3 py-2 text-sm outline-none focus:border-primary'
-                placeholder='(11) 99999-9999'
-              />
+                placeholder='(11) 99999-9999' />
             </div>
 
+            {/* Especialidade */}
             <div className='col-span-2'>
               <label className='mb-1 block text-sm font-medium'>Especialidade</label>
-              <input
-                type='text'
-                value={form.specialty}
-                onChange={e => set('specialty', e.target.value)}
+              <input type='text' value={form.specialty} onChange={e => set('specialty', e.target.value)}
                 className='w-full rounded-lg border bg-background px-3 py-2 text-sm outline-none focus:border-primary'
-                placeholder='Ex: HIIT, CrossFit, Hyrox'
-              />
-            </div>
-
-            <div className='col-span-2 flex items-center gap-2'>
-              <input
-                type='checkbox'
-                id='is_active'
-                checked={form.is_active}
-                onChange={e => set('is_active', e.target.checked)}
-                className='h-4 w-4 accent-primary'
-              />
-              <label htmlFor='is_active' className='text-sm'>Ativo</label>
+                placeholder='Ex: HIIT, CrossFit, Hyrox' />
             </div>
           </div>
 
           <div className='flex justify-end gap-3 pt-2'>
-            <button
-              type='button'
-              onClick={onClose}
-              className='rounded-lg border px-4 py-2 text-sm hover:bg-action-hover'
-            >
-              Cancelar
-            </button>
-            <button
-              type='submit'
-              disabled={loading}
-              className='flex items-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-medium text-white hover:bg-primary/90 disabled:opacity-60'
-            >
+            <button type='button' onClick={onClose}
+              className='rounded-lg border px-4 py-2 text-sm hover:bg-action-hover'>Cancelar</button>
+            <button type='submit' disabled={loading}
+              className='flex items-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-medium text-white hover:bg-primary/90 disabled:opacity-60'>
               {loading && <i className='tabler-loader-2 animate-spin' />}
               Cadastrar
             </button>

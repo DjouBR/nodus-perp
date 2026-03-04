@@ -7,11 +7,13 @@ import { eq, and, or, like, sql } from 'drizzle-orm'
 import bcrypt from 'bcryptjs'
 import { randomUUID } from 'crypto'
 
-const COACH_ROLES = ['coach', 'academy_coach']
+// Roles válidos para coach no ENUM do banco: apenas 'coach'
+// Não existe 'academy_coach' no ENUM — diferenciamos via coach_profiles ou campo futuro
+const COACH_ROLES = ['coach']
 
-// ─────────────────────────────────────────────────────────────────────────────
+// ──────────────────────────────────────────────────────────────────────────────
 // GET /api/coaches
-// ─────────────────────────────────────────────────────────────────────────────
+// ──────────────────────────────────────────────────────────────────────────────
 export async function GET(req) {
   const session = await getServerSession(authOptions)
   if (!session) return NextResponse.json({ error: 'N\u00e3o autorizado' }, { status: 401 })
@@ -20,16 +22,11 @@ export async function GET(req) {
   const page    = Math.max(1, parseInt(searchParams.get('page')    ?? '1'))
   const perPage = Math.min(100, parseInt(searchParams.get('perPage') ?? '10'))
   const search  = searchParams.get('search') ?? ''
-  const type    = searchParams.get('type')   ?? ''
   const offset  = (page - 1) * perPage
 
   try {
-    // Filtro de roles sempre presente — nunca resulta em array vazio
-    const roleFilter = (type && COACH_ROLES.includes(type))
-      ? eq(users.role, type)
-      : or(eq(users.role, 'coach'), eq(users.role, 'academy_coach'))
-
-    const conditions = [roleFilter]
+    // Filtro base: role = 'coach' (\u00fanico valor v\u00e1lido no ENUM para professores)
+    const conditions = [eq(users.role, 'coach')]
 
     if (session.user.role !== 'super_admin') {
       conditions.push(eq(users.tenant_id, session.user.tenant_id))
@@ -60,12 +57,17 @@ export async function GET(req) {
       db.select({ count: sql`COUNT(*)` }).from(users).where(where),
     ])
 
-    // Enriquece com specialties/cref do coach_profiles
+    // Enriquece com dados do coach_profiles (specialties, cref, bio, employee_type)
     let profilesMap = {}
     if (data.length > 0) {
       const ids = data.map(u => u.id)
       const profiles = await db
-        .select({ user_id: coach_profiles.user_id, specialties: coach_profiles.specialties, cref: coach_profiles.cref })
+        .select({
+          user_id:     coach_profiles.user_id,
+          specialties: coach_profiles.specialties,
+          cref:        coach_profiles.cref,
+          bio:         coach_profiles.bio,
+        })
         .from(coach_profiles)
         .where(sql`${coach_profiles.user_id} IN (${sql.join(ids.map(id => sql`${id}`), sql`, `)})`)
       profiles.forEach(p => { profilesMap[p.user_id] = p })
@@ -75,26 +77,23 @@ export async function GET(req) {
       ...u,
       specialty: profilesMap[u.id]?.specialties ?? null,
       cref:      profilesMap[u.id]?.cref        ?? null,
+      bio:       profilesMap[u.id]?.bio         ?? null,
+      // employee_type vem do coach_profiles — usamos campo extra para diferenciar
+      // funcion\u00e1rio x independente sem precisar de segundo ENUM no banco
+      employee_type: profilesMap[u.id]?.employee_type ?? 'academy',
     }))
 
     const total = Number(count)
-
-    return NextResponse.json({
-      data: enriched,
-      total,
-      page,
-      perPage,
-      totalPages: Math.ceil(total / perPage),
-    })
+    return NextResponse.json({ data: enriched, total, page, perPage, totalPages: Math.ceil(total / perPage) })
   } catch (err) {
     console.error('[GET /api/coaches]', err)
     return NextResponse.json({ error: 'Erro interno' }, { status: 500 })
   }
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
+// ──────────────────────────────────────────────────────────────────────────────
 // POST /api/coaches
-// ─────────────────────────────────────────────────────────────────────────────
+// ──────────────────────────────────────────────────────────────────────────────
 export async function POST(req) {
   const session = await getServerSession(authOptions)
   if (!session) return NextResponse.json({ error: 'N\u00e3o autorizado' }, { status: 401 })
@@ -110,27 +109,39 @@ export async function POST(req) {
     if (!name || !email || !password)
       return NextResponse.json({ error: 'Nome, email e senha s\u00e3o obrigat\u00f3rios' }, { status: 400 })
 
-    // Verifica email duplicado
+    // Verifica email duplicado — informa qual role j\u00e1 usa esse email
     const [existing] = await db
-      .select({ id: users.id })
+      .select({ id: users.id, role: users.role })
       .from(users)
       .where(eq(users.email, email.trim().toLowerCase()))
       .limit(1)
 
-    if (existing)
-      return NextResponse.json({ error: 'Email j\u00e1 cadastrado' }, { status: 409 })
+    if (existing) {
+      const roleLabel = {
+        athlete:      'um atleta',
+        coach:        'um coach',
+        tenant_admin: 'um administrador',
+        receptionist: 'um recepcionista',
+        super_admin:  'um super admin',
+      }
+      const who = roleLabel[existing.role] ?? 'outro usu\u00e1rio'
+      return NextResponse.json(
+        { error: `Este email j\u00e1 est\u00e1 cadastrado como ${who}` },
+        { status: 409 }
+      )
+    }
 
-    const userId = randomUUID()                           // BUG 1 CORRIGIDO: UUID expl\u00edcito
-    const role   = type === 'coach' ? 'coach' : 'academy_coach'
+    const userId = randomUUID()
     const hash   = await bcrypt.hash(password, 10)
 
-    // Insere em users — SEM campo specialty (n\u00e3o existe na tabela users)
-    await db.insert(users).values({                       // BUG 2 CORRIGIDO
+    // role fixo = 'coach' (\u00fanico valor v\u00e1lido no ENUM para professores)
+    // O tipo funcion\u00e1rio/independente fica em coach_profiles
+    await db.insert(users).values({
       id:            userId,
       name:          name.trim(),
       email:         email.trim().toLowerCase(),
       password_hash: hash,
-      role,
+      role:          'coach',          // SEMPRE 'coach' — academy_coach n\u00e3o existe no ENUM
       phone:         phone ?? null,
       is_active:     1,
       tenant_id:     session.user.role === 'super_admin'
@@ -140,16 +151,16 @@ export async function POST(req) {
       updated_at:    new Date(),
     })
 
-    // Cria coach_profiles se tiver especialidade
-    if (specialty) {
-      await db.insert(coach_profiles).values({
-        id:          randomUUID(),
-        user_id:     userId,
-        specialties: specialty,
-        created_at:  new Date(),
-        updated_at:  new Date(),
-      })
-    }
+    // Cria coach_profiles com especialidade e tipo (independente x funcion\u00e1rio)
+    await db.insert(coach_profiles).values({
+      id:          randomUUID(),
+      user_id:     userId,
+      specialties: specialty ?? null,
+      // type: 'academy' | 'independent' — guardamos aqui at\u00e9 migrar o schema
+      bio:         type === 'coach' ? 'independent' : 'academy',
+      created_at:  new Date(),
+      updated_at:  new Date(),
+    })
 
     return NextResponse.json({ success: true, id: userId }, { status: 201 })
   } catch (err) {
