@@ -1,4 +1,4 @@
-// NODUS — Middleware de Proteção de Rotas com RBAC
+// NODUS — Middleware de Proteção de Rotas com RBAC (8 roles)
 // LGPD: super_admin acessa apenas dados operacionais/agregados do seu escopo.
 // Dados pessoais de atletas, coaches e recepcionistas são isolados por tenant.
 import { withAuth } from 'next-auth/middleware'
@@ -16,12 +16,13 @@ const ALL_ROLES = [
   'academy_coach',
   'receptionist',
   'academy_athlete',
+  'coach_athlete',
   'athlete',
 ]
 
-const STAFF_ROLES  = ['super_admin', 'tenant_admin', 'coach', 'academy_coach', 'receptionist']
-const COACH_ROLES  = ['tenant_admin', 'coach', 'academy_coach']
-const ATHLETE_ROLES = ['academy_athlete', 'athlete']
+const STAFF_ROLES   = ['super_admin', 'tenant_admin', 'coach', 'academy_coach', 'receptionist']
+const COACH_ROLES   = ['tenant_admin', 'coach', 'academy_coach']
+const ATHLETE_ROLES = ['academy_athlete', 'coach_athlete', 'athlete']
 
 const ROUTE_PERMISSIONS = {
 
@@ -34,11 +35,11 @@ const ROUTE_PERMISSIONS = {
   '/academy_coach':    ['academy_coach'],
   '/recepcionist':     ['receptionist'],
   '/academy_athlete':  ['academy_athlete'],
+  '/coach_athlete':    ['coach_athlete'],    // rotas exclusivas do aluno do coach
   '/athlete':          ['athlete'],
 
   // ──────────────────────────────────────────────────
-  // ROTAS LEGADAS — páginas existentes antes da divisão por role
-  // Mantidas para não quebrar páginas já construídas
+  // ROTAS COMPARTILHADAS
   // ──────────────────────────────────────────────────
   '/academies':        ['super_admin', 'tenant_admin'],
   '/coaches':          ['super_admin', 'tenant_admin'],
@@ -68,6 +69,7 @@ export const getHomeByRole = role => {
     academy_coach:      '/home',
     receptionist:       '/home',
     academy_athlete:    '/home',
+    coach_athlete:      '/home',
     athlete:            '/home',
     pending_onboarding: '/onboarding',
   }
@@ -83,6 +85,7 @@ export const getSettingsByRole = role => {
     academy_coach:   '/academy_coach/config',
     receptionist:    '/recepcionist/config',
     academy_athlete: '/academy_athlete/config',
+    coach_athlete:   '/coach_athlete/config',
     athlete:         '/athlete/config',
   }
   return map[role] ?? '/profile'

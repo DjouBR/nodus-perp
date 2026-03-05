@@ -3,18 +3,19 @@ import { mysqlTable, varchar, text, tinyint, timestamp, date, mysqlEnum, int } f
 // ───────────────────────────────────────────────────────────────────
 // USERS — todos os usuários do sistema (role define o tipo)
 //
-// Hierarquia de roles:
-//   super_admin    → dono da plataforma NODUS, vê tudo
-//   tenant_admin   → dono/gestor de uma academia
-//   academy_coach  → professor/treinador FUNCIONÁRIO de uma academia (cadastrado pelo tenant_admin)
-//   coach          → treinador INDEPENDENTE, tem seus próprios alunos (cadastrado pelo super_admin)
-//   receptionist   → recepcionista de uma academia
-//   academy_athlete→ aluno de uma academia (cadastrado pelo tenant_admin ou academy_coach)
-//   athlete        → aluno INDEPENDENTE de um coach (cadastrado pelo coach)
+// Hierarquia de roles (8 roles):
+//   super_admin     → dono da plataforma NODUS, vê tudo
+//   tenant_admin    → dono/gestor de uma academia
+//   academy_coach   → professor/treinador FUNCIONÁRIO de academia (cadastrado pelo tenant_admin)
+//   coach           → treinador INDEPENDENTE com seus próprios alunos (cadastrado pelo super_admin)
+//   receptionist    → recepcionista de uma academia (cadastrado pelo tenant_admin)
+//   academy_athlete → aluno da academia (cadastrado pelo tenant_admin ou academy_coach)
+//   coach_athlete   → aluno do treinador independente (cadastrado pelo coach)
+//   athlete         → usuário INDEPENDENTE sem vínculo com academia ou treinador (self-register)
 // ───────────────────────────────────────────────────────────────────
 export const users = mysqlTable('users', {
   id:              varchar('id', { length: 36 }).primaryKey(),
-  tenant_id:       varchar('tenant_id', { length: 36 }),               // NULL = super_admin / coach independente
+  tenant_id:       varchar('tenant_id', { length: 36 }),               // NULL = super_admin / coach independente / athlete
   unit_id:         varchar('unit_id', { length: 36 }),                 // NULL = acesso a todas as unidades
   name:            varchar('name', { length: 100 }).notNull(),
   email:           varchar('email', { length: 100 }).notNull().unique(),
@@ -24,9 +25,10 @@ export const users = mysqlTable('users', {
                      'tenant_admin',
                      'academy_coach',    // professor funcionário da academia
                      'coach',            // treinador independente
-                     'receptionist',
+                     'receptionist',     // recepcionista da academia
                      'academy_athlete',  // aluno da academia
-                     'athlete',          // aluno do coach independente
+                     'coach_athlete',    // aluno do treinador independente
+                     'athlete',          // usuário independente (sem vínculo)
                    ]).notNull().default('academy_athlete'),
   avatar_url:      varchar('avatar_url', { length: 255 }),
   phone:           varchar('phone', { length: 20 }),
@@ -41,11 +43,13 @@ export const users = mysqlTable('users', {
 })
 
 // ───────────────────────────────────────────────────────────────────
-// ATHLETE_PROFILES — dados esportivos (vale para academy_athlete e athlete)
+// ATHLETE_PROFILES — dados esportivos
+// Vale para: academy_athlete, coach_athlete e athlete
 // ───────────────────────────────────────────────────────────────────
 export const athlete_profiles = mysqlTable('athlete_profiles', {
   id:                  varchar('id', { length: 36 }).primaryKey(),
   user_id:             varchar('user_id', { length: 36 }).notNull().unique(),
+  coach_id:            varchar('coach_id', { length: 36 }),            // FK users.id do coach (para coach_athlete)
   hr_max:              int('hr_max'),
   hr_rest:             int('hr_rest'),
   hr_threshold:        int('hr_threshold'),
@@ -69,7 +73,8 @@ export const athlete_profiles = mysqlTable('athlete_profiles', {
 })
 
 // ───────────────────────────────────────────────────────────────────
-// COACH_PROFILES — dados profissionais (vale para academy_coach e coach)
+// COACH_PROFILES — dados profissionais
+// Vale para: academy_coach e coach
 // ───────────────────────────────────────────────────────────────────
 export const coach_profiles = mysqlTable('coach_profiles', {
   id:           varchar('id', { length: 36 }).primaryKey(),

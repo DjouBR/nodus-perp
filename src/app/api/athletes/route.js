@@ -7,8 +7,8 @@ import { eq, and, or, like, sql } from 'drizzle-orm'
 import bcrypt from 'bcryptjs'
 import { randomUUID } from 'crypto'
 
-// Roles considerados "atleta" no sistema
-const ATHLETE_ROLES = ['athlete', 'academy_athlete']
+// Roles considerados "atleta" no sistema (todos os 3 tipos)
+const ATHLETE_ROLES = ['academy_athlete', 'coach_athlete', 'athlete']
 
 // ─────────────────────────────────────────────────────────────────────────────
 // GET /api/athletes
@@ -16,7 +16,7 @@ const ATHLETE_ROLES = ['athlete', 'academy_athlete']
 export async function GET(request) {
   try {
     const session = await getServerSession(authOptions)
-    if (!session) return NextResponse.json({ error: 'N\u00e3o autorizado' }, { status: 401 })
+    if (!session) return NextResponse.json({ error: 'Não autorizado' }, { status: 401 })
 
     const allowedRoles = ['super_admin', 'tenant_admin', 'coach', 'academy_coach', 'receptionist']
     if (!allowedRoles.includes(session.user.role))
@@ -29,12 +29,28 @@ export async function GET(request) {
     const status  = searchParams.get('status') ?? ''
     const offset  = (page - 1) * perPage
 
-    // Sempre filtra pelos dois roles de atleta
-    const conditions = [
-      or(eq(users.role, 'athlete'), eq(users.role, 'academy_athlete'))
-    ]
+    const conditions = []
 
-    // Isolamento por tenant (super_admin v\u00ea todos)
+    // Filtro de roles por quem acessa:
+    // - tenant_admin / academy_coach / receptionist → vêem apenas academy_athlete
+    // - coach → vê apenas coach_athlete que ele mesmo cadastrou (via coach_id no profile)
+    // - super_admin → vê todos os tipos de atleta
+    if (session.user.role === 'super_admin') {
+      conditions.push(
+        or(
+          eq(users.role, 'academy_athlete'),
+          eq(users.role, 'coach_athlete'),
+          eq(users.role, 'athlete')
+        )
+      )
+    } else if (session.user.role === 'coach') {
+      conditions.push(eq(users.role, 'coach_athlete'))
+    } else {
+      // tenant_admin, academy_coach, receptionist
+      conditions.push(eq(users.role, 'academy_athlete'))
+    }
+
+    // Isolamento por tenant (super_admin vê todos)
     if (session.user.role !== 'super_admin' && session.user.tenant_id)
       conditions.push(eq(users.tenant_id, session.user.tenant_id))
 
@@ -42,13 +58,12 @@ export async function GET(request) {
       conditions.push(or(like(users.name, `%${search}%`), like(users.email, `%${search}%`)))
 
     // Filtro de status via athlete_profiles
-    let filteredAthleteIds = null
     if (status) {
       const profileRows = await db
         .select({ user_id: athlete_profiles.user_id })
         .from(athlete_profiles)
         .where(eq(athlete_profiles.status, status))
-      filteredAthleteIds = profileRows.map(r => r.user_id)
+      const filteredAthleteIds = profileRows.map(r => r.user_id)
       if (filteredAthleteIds.length === 0)
         return NextResponse.json({ data: [], total: 0, page, perPage, totalPages: 0 })
       conditions.push(
@@ -84,7 +99,6 @@ export async function GET(request) {
       return NextResponse.json({ data: [], total, page, perPage, totalPages })
 
     const ids = athleteRows.map(a => a.id)
-    const inIds = sql`${users.id} IN (${sql.join(ids.map(id => sql`${id}`), sql`, `)})`
 
     const profiles   = await db.select().from(athlete_profiles)
       .where(sql`${athlete_profiles.user_id} IN (${sql.join(ids.map(id => sql`${id}`), sql`, `)})`)
@@ -110,14 +124,15 @@ export async function GET(request) {
 
 // ─────────────────────────────────────────────────────────────────────────────
 // POST /api/athletes
-// Role atribu\u00eddo automaticamente com base em quem cadastra:
+// Role atribuído automaticamente com base em quem cadastra:
 //   tenant_admin / academy_coach → academy_athlete
-//   coach / super_admin          → athlete
+//   coach                        → coach_athlete
+//   super_admin                  → usa targetRole do body (academy_athlete | coach_athlete | athlete)
 // ─────────────────────────────────────────────────────────────────────────────
 export async function POST(request) {
   try {
     const session = await getServerSession(authOptions)
-    if (!session) return NextResponse.json({ error: 'N\u00e3o autorizado' }, { status: 401 })
+    if (!session) return NextResponse.json({ error: 'Não autorizado' }, { status: 401 })
 
     const allowedRoles = ['super_admin', 'tenant_admin', 'coach', 'academy_coach']
     if (!allowedRoles.includes(session.user.role))
@@ -126,10 +141,10 @@ export async function POST(request) {
     const body = await request.json()
 
     const errors = []
-    if (!body.name?.trim())  errors.push('Nome \u00e9 obrigat\u00f3rio')
-    if (!body.email?.trim()) errors.push('Email \u00e9 obrigat\u00f3rio')
+    if (!body.name?.trim())  errors.push('Nome é obrigatório')
+    if (!body.email?.trim()) errors.push('Email é obrigatório')
     if (body.email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(body.email))
-      errors.push('Email inv\u00e1lido')
+      errors.push('Email inválido')
     if (errors.length > 0)
       return NextResponse.json({ error: errors.join(', ') }, { status: 400 })
 
@@ -141,20 +156,27 @@ export async function POST(request) {
 
     if (existing) {
       const roleLabel = {
-        athlete: 'um atleta', academy_athlete: 'um aluno de academia',
+        athlete: 'um atleta independente', coach_athlete: 'um aluno de treinador',
+        academy_athlete: 'um aluno de academia',
         coach: 'um coach', academy_coach: 'um professor',
         tenant_admin: 'um administrador', receptionist: 'um recepcionista',
       }
       return NextResponse.json(
-        { error: `Email j\u00e1 cadastrado como ${roleLabel[existing.role] ?? 'outro usu\u00e1rio'}` },
+        { error: `Email já cadastrado como ${roleLabel[existing.role] ?? 'outro usuário'}` },
         { status: 409 }
       )
     }
 
-    // Role autom\u00e1tico: academia cadastra academy_athlete, coach cadastra athlete
-    const athleteRole = ['tenant_admin', 'academy_coach'].includes(session.user.role)
-      ? 'academy_athlete'
-      : 'athlete'
+    // Determina o role do atleta automaticamente
+    let athleteRole
+    if (session.user.role === 'super_admin') {
+      const validTargetRoles = ['academy_athlete', 'coach_athlete', 'athlete']
+      athleteRole = validTargetRoles.includes(body.targetRole) ? body.targetRole : 'athlete'
+    } else if (['tenant_admin', 'academy_coach'].includes(session.user.role)) {
+      athleteRole = 'academy_athlete'
+    } else if (session.user.role === 'coach') {
+      athleteRole = 'coach_athlete'
+    }
 
     const userId   = randomUUID()
     const password = body.password ?? 'nodus@123'
@@ -162,6 +184,9 @@ export async function POST(request) {
     const tenantId = session.user.role === 'super_admin'
       ? (body.tenant_id ?? null)
       : session.user.tenant_id
+
+    // coach_id para vincular coach_athlete ao seu coach
+    const coachId = session.user.role === 'coach' ? session.user.id : null
 
     await db.insert(users).values({
       id:             userId,
@@ -184,6 +209,7 @@ export async function POST(request) {
     await db.insert(athlete_profiles).values({
       id:                randomUUID(),
       user_id:           userId,
+      coach_id:          coachId,
       hr_max:            hrMax,
       hr_rest:           body.hr_rest      ? parseInt(body.hr_rest)      : null,
       hr_threshold:      body.hr_threshold ? parseInt(body.hr_threshold) : null,
