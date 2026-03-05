@@ -9,7 +9,7 @@ import { eq } from 'drizzle-orm'
 import { db } from '@/lib/db/index.js'
 import { users } from '@/lib/db/schema/index.js'
 
-// Todos os roles válidos do sistema NODUS
+// Todos os roles válidos do sistema NODUS (8 roles + pending)
 export const VALID_ROLES = [
   'super_admin',
   'tenant_admin',
@@ -17,8 +17,9 @@ export const VALID_ROLES = [
   'academy_coach',
   'receptionist',
   'academy_athlete',
+  'coach_athlete',  // ← corrigido: estava faltando
   'athlete',
-  'pending_onboarding', // OAuth sem onboarding completo
+  'pending_onboarding',
 ]
 
 export const authOptions = {
@@ -81,7 +82,6 @@ export const authOptions = {
   // ── Callbacks: injeta role, tenant_id e unit_id no JWT e na session ────
   callbacks: {
     async jwt({ token, user, account }) {
-      // Primeiro login: copia dados do objeto user para o token
       if (user) {
         token.id        = user.id
         token.role      = user.role
@@ -89,13 +89,11 @@ export const authOptions = {
         token.unit_id   = user.unit_id
         token.avatar    = user.avatar
       }
-      // OAuth (Google/Facebook): role padrão até completar onboarding
       if (account?.provider === 'google' || account?.provider === 'facebook') {
         token.role      = token.role      ?? 'pending_onboarding'
         token.tenant_id = token.tenant_id ?? null
         token.unit_id   = token.unit_id   ?? null
       }
-      // Sanity check: garante que o role no token é sempre válido
       if (!VALID_ROLES.includes(token.role)) {
         token.role = 'pending_onboarding'
       }
@@ -114,7 +112,6 @@ export const authOptions = {
     }
   },
 
-  // ── Páginas customizadas ─────────────────────────────────────────
   pages: {
     signIn: '/login',
     error:  '/login'
@@ -122,7 +119,7 @@ export const authOptions = {
 
   session: {
     strategy: 'jwt',
-    maxAge:   30 * 24 * 60 * 60  // 30 dias
+    maxAge:   30 * 24 * 60 * 60
   },
 
   secret: process.env.NEXTAUTH_SECRET

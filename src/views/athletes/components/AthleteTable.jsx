@@ -23,7 +23,8 @@ function Avatar({ name, avatar_url }) {
 }
 
 export default function AthleteTable({
-  athletes, loading, page, totalPages, perPage, total, onPageChange, onRefresh, canManage
+  athletes, loading, page, totalPages, perPage, total, onPageChange, onRefresh, canManage,
+  detailBasePath = '/athletes'  // ← cada role passa o seu prefixo de rota
 }) {
   const router = useRouter()
 
@@ -128,7 +129,7 @@ export default function AthleteTable({
                     <div className='flex items-center gap-2'>
                       <button
                         title='Ver perfil'
-                        onClick={() => router.push(`/athletes/${a.id}`)}
+                        onClick={() => router.push(`${detailBasePath}/${a.id}`)}
                         className='rounded-lg p-1.5 text-textSecondary hover:bg-primary/10 hover:text-primary transition-colors'
                       >
                         <i className='tabler-eye text-lg' />
