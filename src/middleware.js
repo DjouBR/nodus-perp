@@ -10,14 +10,8 @@ const PUBLIC_ROUTES = [
 ]
 
 const ALL_ROLES = [
-  'super_admin',
-  'tenant_admin',
-  'coach',
-  'academy_coach',
-  'receptionist',
-  'academy_athlete',
-  'coach_athlete',
-  'athlete',
+  'super_admin', 'tenant_admin', 'coach', 'academy_coach',
+  'receptionist', 'academy_athlete', 'coach_athlete', 'athlete',
 ]
 
 const STAFF_ROLES   = ['super_admin', 'tenant_admin', 'coach', 'academy_coach', 'receptionist']
@@ -35,7 +29,7 @@ const ROUTE_PERMISSIONS = {
   '/academy_coach':    ['academy_coach'],
   '/recepcionist':     ['receptionist'],
   '/academy_athlete':  ['academy_athlete'],
-  '/coach_athlete':    ['coach_athlete'],    // rotas exclusivas do aluno do coach
+  '/coach_athlete':    ['coach_athlete'],
   '/athlete':          ['athlete'],
 
   // ──────────────────────────────────────────────────
@@ -43,7 +37,7 @@ const ROUTE_PERMISSIONS = {
   // ──────────────────────────────────────────────────
   '/academies':        ['super_admin', 'tenant_admin'],
   '/coaches':          ['super_admin', 'tenant_admin'],
-  '/athletes':         ['tenant_admin', 'coach', 'academy_coach', 'receptionist'],
+  '/athletes':         ['tenant_admin', 'academy_coach', 'receptionist'],  // coach usa /coach/athletes
   '/monitoring':       [...COACH_ROLES, ...ATHLETE_ROLES],
   '/planning':         COACH_ROLES,
   '/sessions':         [...COACH_ROLES, 'receptionist'],
@@ -57,7 +51,6 @@ const ROUTE_PERMISSIONS = {
   // ──────────────────────────────────────────────────
   '/home':             ALL_ROLES,
   '/profile':          ALL_ROLES,
-  '/onboarding':       ['pending_onboarding'],
 }
 
 // Rota de destino após login por role
@@ -71,7 +64,7 @@ export const getHomeByRole = role => {
     academy_athlete:    '/home',
     coach_athlete:      '/home',
     athlete:            '/home',
-    pending_onboarding: '/onboarding',
+    pending_onboarding: '/home', // evita 404 enquanto /onboarding não existe
   }
   return homes[role] ?? '/home'
 }
@@ -100,10 +93,9 @@ export default withAuth(
     if (PUBLIC_ROUTES.some(r => pathname.startsWith(r))) return NextResponse.next()
     if (!token) return NextResponse.redirect(new URL('/login', req.url))
 
-    // Obtém a rota mais específica que bate com o pathname
     const matchedRoute = Object.keys(ROUTE_PERMISSIONS)
       .filter(route => pathname.startsWith(route))
-      .sort((a, b) => b.length - a.length)[0] // mais específica vence
+      .sort((a, b) => b.length - a.length)[0]
 
     if (matchedRoute) {
       const allowedRoles = ROUTE_PERMISSIONS[matchedRoute]
