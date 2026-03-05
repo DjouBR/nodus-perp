@@ -17,16 +17,23 @@ import MenuItem from '@mui/material/MenuItem'
 import Button from '@mui/material/Button'
 import { useSettings } from '@core/hooks/useSettings'
 
+// ─────────────────────────────────────────────────────────────────────────────
+// Rótulos exibidos abaixo do nome no dropdown (8 roles)
+// ─────────────────────────────────────────────────────────────────────────────
 const ROLE_LABELS = {
   super_admin:     'Super Admin',
   tenant_admin:    'Admin Academia',
   coach:           'Coach',
   academy_coach:   'Treinador',
   receptionist:    'Recepcionista',
-  academy_athlete: 'Aluno',
-  athlete:         'Atleta',
+  academy_athlete: 'Aluno da Academia',
+  coach_athlete:   'Aluno do Treinador',  // novo
+  athlete:         'Atleta Independente', // renomeado para clareza
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+// URL da página de perfil por role
+// ─────────────────────────────────────────────────────────────────────────────
 const PROFILE_URL = {
   super_admin:     '/admin/userprofile',
   tenant_admin:    '/academy/userprofile',
@@ -34,9 +41,13 @@ const PROFILE_URL = {
   academy_coach:   '/academy_coach/userprofile',
   receptionist:    '/recepcionist/userprofile',
   academy_athlete: '/academy_athlete/userprofile',
+  coach_athlete:   '/coach_athlete/userprofile',   // novo
   athlete:         '/athlete/userprofile',
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+// URL de configurações por role
+// ─────────────────────────────────────────────────────────────────────────────
 const SETTINGS_URL = {
   super_admin:     '/admin/settings',
   tenant_admin:    '/academy/config',
@@ -44,35 +55,56 @@ const SETTINGS_URL = {
   academy_coach:   '/academy_coach/config',
   receptionist:    '/recepcionist/config',
   academy_athlete: '/academy_athlete/config',
+  coach_athlete:   '/coach_athlete/config',        // novo
   athlete:         '/athlete/config',
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+// Itens extras do dropdown (entre Meu Perfil e Configurações)
+// Meu Perfil e Configurações já são fixos no JSX abaixo
+// ─────────────────────────────────────────────────────────────────────────────
 const EXTRA_ITEMS = {
   super_admin:     [],
+
   tenant_admin:    [
-    { label: 'Mensagens', icon: 'tabler-message', url: '/academy/messages' },
+    { label: 'Mensagens',     icon: 'tabler-message', url: '/academy/messages' },
   ],
+
   coach:           [
-    { label: 'Mensagens', icon: 'tabler-message', url: '/coach/messages' },
+    { label: 'Mensagens',     icon: 'tabler-message', url: '/coach/messages' },
+    { label: 'Financeiro',    icon: 'tabler-cash',    url: '/coach/financial' },
   ],
+
   academy_coach:   [
-    { label: 'Mensagens', icon: 'tabler-message', url: '/academy_coach/messages' },
+    { label: 'Mensagens',     icon: 'tabler-message', url: '/academy_coach/messages' },
   ],
+
   receptionist:    [
-    { label: 'Mensagens', icon: 'tabler-message', url: '/recepcionist/messages' },
+    { label: 'Mensagens',     icon: 'tabler-message', url: '/recepcionist/messages' },
   ],
+
   academy_athlete: [
-    { label: 'Mensagens',       icon: 'tabler-message',    url: '/academy_athlete/messages'  },
-    { label: 'Avaliação Física', icon: 'tabler-clipboard-heart', url: '/academy_athlete/physical'  },
-    { label: 'Financeiro',      icon: 'tabler-cash',       url: '/academy_athlete/financial' },
+    { label: 'Mensagens',         icon: 'tabler-message',          url: '/academy_athlete/messages'  },
+    { label: 'Avaliação Física',  icon: 'tabler-clipboard-heart',   url: '/academy_athlete/physical'  },
+    { label: 'Financeiro',        icon: 'tabler-cash',             url: '/academy_athlete/financial' },
   ],
+
+  // Aluno do treinador independente (novo)
+  coach_athlete:   [
+    { label: 'Mensagens',         icon: 'tabler-message',          url: '/coach_athlete/messages'  },
+    { label: 'Avaliação Física',  icon: 'tabler-clipboard-heart',   url: '/coach_athlete/physical'  },
+    { label: 'Financeiro',        icon: 'tabler-cash',             url: '/coach_athlete/financial' },
+  ],
+
   athlete:         [
-    { label: 'Mensagens',       icon: 'tabler-message',    url: '/athlete/messages'  },
-    { label: 'Avaliação Física', icon: 'tabler-clipboard-heart', url: '/athlete/physical'  },
-    { label: 'Financeiro',      icon: 'tabler-cash',       url: '/athlete/financial' },
+    { label: 'Mensagens',         icon: 'tabler-message',          url: '/athlete/messages'  },
+    { label: 'Avaliação Física',  icon: 'tabler-clipboard-heart',   url: '/athlete/physical'  },
   ],
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+// Helpers de avatar
+// ─────────────────────────────────────────────────────────────────────────────
 const BadgeContentSpan = styled('span')({
   width: 8,
   height: 8,
@@ -91,6 +123,9 @@ function avatarColor(name) {
   return AVATAR_COLORS[(name?.charCodeAt(0) ?? 0) % AVATAR_COLORS.length]
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+// Componente
+// ─────────────────────────────────────────────────────────────────────────────
 const UserDropdown = () => {
   const [open, setOpen] = useState(false)
   const anchorRef = useRef(null)
@@ -120,7 +155,13 @@ const UserDropdown = () => {
   const AvatarEl = ({ size = 38 }) => user?.avatar ? (
     <Avatar alt={user.name} src={user.avatar} sx={{ width: size, height: size }} />
   ) : (
-    <Avatar sx={{ width: size, height: size, backgroundColor: avatarColor(user?.name), color: '#fff', fontSize: size <= 38 ? '0.875rem' : '1rem', fontWeight: 700 }}>
+    <Avatar sx={{
+      width: size, height: size,
+      backgroundColor: avatarColor(user?.name),
+      color: '#fff',
+      fontSize: size <= 38 ? '0.875rem' : '1rem',
+      fontWeight: 700
+    }}>
       {getInitials(user?.name)}
     </Avatar>
   )
@@ -154,6 +195,7 @@ const UserDropdown = () => {
               <ClickAwayListener onClickAway={e => handleDropdownClose(e)}>
                 <MenuList>
 
+                  {/* Cabeçalho com avatar + nome + role + email */}
                   <div className='flex items-center plb-2 pli-6 gap-2' tabIndex={-1}>
                     <AvatarEl size={40} />
                     <div className='flex items-start flex-col'>
@@ -169,11 +211,13 @@ const UserDropdown = () => {
 
                   <Divider className='mlb-1' />
 
+                  {/* Item fixo: Meu Perfil */}
                   <MenuItem className='mli-2 gap-3' onClick={e => handleDropdownClose(e, profileUrl)}>
                     <i className='tabler-user' />
                     <Typography color='text.primary'>Meu Perfil</Typography>
                   </MenuItem>
 
+                  {/* Itens dinâmicos por role */}
                   {extraItems.map(item => (
                     <MenuItem key={item.url} className='mli-2 gap-3' onClick={e => handleDropdownClose(e, item.url)}>
                       <i className={item.icon} />
@@ -181,6 +225,7 @@ const UserDropdown = () => {
                     </MenuItem>
                   ))}
 
+                  {/* Item fixo: Configurações */}
                   <MenuItem className='mli-2 gap-3' onClick={e => handleDropdownClose(e, settingsUrl)}>
                     <i className='tabler-settings' />
                     <Typography color='text.primary'>Configurações</Typography>
@@ -188,6 +233,7 @@ const UserDropdown = () => {
 
                   <Divider className='mlb-1' />
 
+                  {/* Botão Sair */}
                   <div className='flex items-center plb-2 pli-3'>
                     <Button fullWidth variant='contained' color='error' size='small'
                       endIcon={<i className='tabler-logout' />}
