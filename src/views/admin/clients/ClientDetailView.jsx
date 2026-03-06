@@ -7,6 +7,17 @@ const fmt     = (v, u = '') => (v != null && v !== '') ? `${v}${u}` : '—'
 const fmtDate = d => d ? new Date(d).toLocaleDateString('pt-BR') : '—'
 const fmtDT   = d => d ? new Date(d).toLocaleString('pt-BR', { dateStyle:'short', timeStyle:'short' }) : '—'
 
+// Converte qualquer formato de data para yyyy-MM-dd (necessário para <input type="date">)
+const toDateInput = d => {
+  if (!d) return ''
+  // Já está no formato correto
+  if (/^\d{4}-\d{2}-\d{2}$/.test(d)) return d
+  // ISO string ou Date object
+  const parsed = new Date(d)
+  if (isNaN(parsed.getTime())) return ''
+  return parsed.toISOString().slice(0, 10)
+}
+
 const ROLE_CONFIG = {
   tenant_admin: { label: 'Academia / Franquia',     color: 'bg-info/15 text-info',       icon: 'tabler-building-community' },
   coach:        { label: 'Treinador Independente',  color: 'bg-warning/15 text-warning', icon: 'tabler-user-star'           },
@@ -57,10 +68,14 @@ export default function ClientDetailView({ clientId }) {
       .then(d => {
         setData(d)
         setEditForm({
-          name: d.name ?? '', email: d.email ?? '',
-          phone: d.phone ?? '', document: d.document ?? '',
-          birthdate: d.birthdate ?? '', gender: d.gender ?? '',
-          is_active: d.is_active ?? 1, role: d.role ?? '',
+          name:      d.name      ?? '',
+          email:     d.email     ?? '',
+          phone:     d.phone     ?? '',
+          document:  d.document  ?? '',
+          birthdate: toDateInput(d.birthdate), // normaliza para yyyy-MM-dd
+          gender:    d.gender    ?? '',
+          is_active: d.is_active ?? 1,
+          role:      d.role      ?? '',
         })
       })
       .finally(() => setLoading(false))
@@ -71,13 +86,19 @@ export default function ClientDetailView({ clientId }) {
   const handleSave = async () => {
     setSaving(true)
     try {
-      await fetch(`/api/admin/clients/${clientId}`, {
+      const res = await fetch(`/api/admin/clients/${clientId}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(editForm),
       })
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}))
+        throw new Error(err.error ?? 'Falha ao salvar')
+      }
       load()
       setEditMode(false)
+    } catch (err) {
+      alert(err.message)
     } finally {
       setSaving(false)
     }
@@ -153,28 +174,28 @@ export default function ClientDetailView({ clientId }) {
         <div className='grid grid-cols-1 gap-6 lg:grid-cols-3'>
           <div className='flex flex-col gap-6 lg:col-span-2'>
             <Card title='Dados Pessoais' icon='tabler-id-badge'>
-              <InfoRow label='Telefone'   value={fmt(data.phone)} />
-              <InfoRow label='Gênero'     value={{ M:'Masculino', F:'Feminino', other:'Outro' }[data.gender] ?? '—'} />
-              <InfoRow label='Nascimento' value={fmtDate(data.birthdate)} />
-              <InfoRow label='Documento'  value={fmt(data.document)} />
-              <InfoRow label='Tipo'       value={rc.label} />
-              <InfoRow label='Cadastrado' value={fmtDate(data.created_at)} />
+              <InfoRow label='Telefone'      value={fmt(data.phone)} />
+              <InfoRow label='Gênero'        value={{ M:'Masculino', F:'Feminino', other:'Outro' }[data.gender] ?? '—'} />
+              <InfoRow label='Nascimento'    value={fmtDate(data.birthdate)} />
+              <InfoRow label='Documento'     value={fmt(data.document)} />
+              <InfoRow label='Tipo'          value={rc.label} />
+              <InfoRow label='Cadastrado'    value={fmtDate(data.created_at)} />
               <InfoRow label='Último Acesso' value={fmtDT(data.last_login)} />
             </Card>
 
             {data.tenant && (
               <Card title='Tenant Vinculado' icon='tabler-building'>
-                <InfoRow label='Nome'   value={data.tenant.name} />
-                <InfoRow label='Tipo'   value={{ franchise:'Franquia', academy:'Academia', trainer:'Equipe' }[data.tenant.type] ?? data.tenant.type} />
-                <InfoRow label='Status' value={data.tenant.status} />
-                <InfoRow label='Email'  value={fmt(data.tenant.email)} />
+                <InfoRow label='Nome'     value={data.tenant.name} />
+                <InfoRow label='Tipo'     value={{ franchise:'Franquia', academy:'Academia', trainer:'Equipe' }[data.tenant.type] ?? data.tenant.type} />
+                <InfoRow label='Status'   value={data.tenant.status} />
+                <InfoRow label='Email'    value={fmt(data.tenant.email)} />
                 <InfoRow label='Telefone' value={fmt(data.tenant.phone)} />
               </Card>
             )}
 
             {data.profile && data.role === 'coach' && (
               <Card title='Perfil Profissional' icon='tabler-certificate'>
-                <InfoRow label='CREF' value={fmt(data.profile.cref)} />
+                <InfoRow label='CREF'          value={fmt(data.profile.cref)} />
                 <InfoRow label='Especialidades' value={fmt(data.profile.specialties)} />
                 {data.profile.bio && (
                   <div className='mt-3 rounded-xl p-3' style={{ backgroundColor: 'var(--mui-palette-action-hover)' }}>
@@ -188,9 +209,9 @@ export default function ClientDetailView({ clientId }) {
           <div className='flex flex-col gap-6'>
             <Card title='Resumo da Conta' icon='tabler-chart-bar'>
               {[
-                ['tabler-calendar',   'text-info',    'Membro desde',   fmtDate(data.created_at)],
-                ['tabler-login',      'text-warning', 'Último login',    fmtDate(data.last_login)],
-                ['tabler-mail-check', 'text-success', 'Email verificado', data.email_verified ? 'Sim' : 'Não'],
+                ['tabler-calendar',   'text-info',    'Membro desde',     fmtDate(data.created_at)],
+                ['tabler-login',      'text-warning', 'Último login',      fmtDate(data.last_login)],
+                ['tabler-mail-check', 'text-success', 'Email verificado',  data.email_verified ? 'Sim' : 'Não'],
               ].map(([icon, color, label, val]) => (
                 <div key={label} className='flex items-center justify-between rounded-xl p-3 mb-2'
                   style={{ backgroundColor: 'var(--mui-palette-action-hover)' }}
