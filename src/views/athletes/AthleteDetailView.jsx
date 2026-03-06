@@ -3,21 +3,21 @@
 import { useState, useEffect, use } from 'react'
 import { useRouter } from 'next/navigation'
 
-// ── Helpers ────────────────────────────────────────────────────────────────
+// ── Helpers ──────────────────────────────────────────────────────────────────────
 const fmt = (val, unit = '') => val ? `${val}${unit}` : '—'
 const fmtDate = d => d ? new Date(d).toLocaleDateString('pt-BR') : '—'
 const GENDER  = { M: 'Masculino', F: 'Feminino', other: 'Outro' }
 const STATUS_STYLE = {
-  active:    { label: 'Ativo',    cls: 'bg-success/15 text-success' },
-  inactive:  { label: 'Inativo', cls: 'bg-warning/15 text-warning' },
-  suspended: { label: 'Suspenso',cls: 'bg-error/15 text-error'     },
+  active:    { label: 'Ativo',     cls: 'bg-success/15 text-success' },
+  inactive:  { label: 'Inativo',   cls: 'bg-warning/15 text-warning' },
+  suspended: { label: 'Suspenso',  cls: 'bg-error/15 text-error'     },
 }
 const ZONE_COLORS = [
-  { bg: 'bg-blue-500/15',  text: 'text-blue-500',  label: 'Z1 Recuperação' },
-  { bg: 'bg-green-500/15', text: 'text-green-500', label: 'Z2 Base Aeróbia' },
-  { bg: 'bg-yellow-500/15',text: 'text-yellow-500',label: 'Z3 Limiar' },
-  { bg: 'bg-orange-500/15',text: 'text-orange-500',label: 'Z4 Anaeróbio' },
-  { bg: 'bg-red-500/15',   text: 'text-red-500',   label: 'Z5 Máximo' },
+  { bg: 'bg-blue-500/15',   text: 'text-blue-500',   label: 'Z1 Recuperação'  },
+  { bg: 'bg-green-500/15',  text: 'text-green-500',  label: 'Z2 Base Aeróbia' },
+  { bg: 'bg-yellow-500/15', text: 'text-yellow-500', label: 'Z3 Limiar'       },
+  { bg: 'bg-orange-500/15', text: 'text-orange-500', label: 'Z4 Anaeróbio'   },
+  { bg: 'bg-red-500/15',    text: 'text-red-500',    label: 'Z5 Máximo'       },
 ]
 
 function Avatar({ name, avatar_url, size = 'lg' }) {
@@ -73,16 +73,24 @@ function ZoneBadge({ zone, minBpm, maxBpm, idx }) {
   )
 }
 
-// ── Componente principal ───────────────────────────────────────────────────
-export default function AthleteDetailView({ params }) {
-  const resolvedParams = use(params)
-  const athleteId = resolvedParams.id
+// ── Componente principal ─────────────────────────────────────────────────────────────────────
+// Aceita 2 formas de uso:
+//   1) Via page route: <AthleteDetailView params={params} />
+//      - params é o objeto Next.js com { id }
+//      - backPath define para onde o breadcrumb/voltar aponta (padrão: /athletes)
+//   2) Via component: <AthleteDetailView athleteId="uuid" backPath="/coach/athletes" />
+export default function AthleteDetailView({ params, athleteId: propAthleteId, backPath = '/athletes' }) {
+  // Suporta tanto params (page route) quanto athleteId direto (component)
+  const resolvedParams = params ? use(params) : null
+  const athleteId = propAthleteId ?? resolvedParams?.id
   const router    = useRouter()
+
   const [data, setData]       = useState(null)
   const [loading, setLoading] = useState(true)
-  const [tab, setTab]         = useState('overview') // overview | sessions | logs
+  const [tab, setTab]         = useState('overview')
 
   useEffect(() => {
+    if (!athleteId) return
     fetch(`/api/athletes/${athleteId}`)
       .then(r => r.json())
       .then(setData)
@@ -99,7 +107,13 @@ export default function AthleteDetailView({ params }) {
     <div className='flex h-64 flex-col items-center justify-center gap-3'>
       <i className='tabler-user-off text-5xl' style={{ color: 'var(--mui-palette-text-disabled)' }} />
       <p>Atleta não encontrado</p>
-      <button onClick={() => router.back()} className='text-sm underline' style={{ color: 'var(--mui-palette-primary-main)' }}>Voltar</button>
+      <button
+        onClick={() => router.push(backPath)}
+        className='text-sm underline'
+        style={{ color: 'var(--mui-palette-primary-main)' }}
+      >
+        Voltar
+      </button>
     </div>
   )
 
@@ -107,7 +121,6 @@ export default function AthleteDetailView({ params }) {
   const sensor = data.sensor
   const status = STATUS_STYLE[p.status] ?? STATUS_STYLE.active
 
-  // Zonas de FC calculadas
   const hrMax = p.hr_max
   const zones = hrMax ? [
     { min: Math.round(hrMax * 0.50), max: p.zone1_max ?? Math.round(hrMax * 0.60) },
@@ -119,21 +132,26 @@ export default function AthleteDetailView({ params }) {
 
   return (
     <div className='flex flex-col gap-6'>
-      {/* Breadcrumb */}
+
+      {/* Breadcrumb com backPath dinâmico */}
       <div className='flex items-center gap-2 text-sm' style={{ color: 'var(--mui-palette-text-secondary)' }}>
-        <button onClick={() => router.push('/athletes')} className='hover:underline' style={{ color: 'var(--mui-palette-primary-main)' }}>Atletas</button>
+        <button
+          onClick={() => router.push(backPath)}
+          className='hover:underline'
+          style={{ color: 'var(--mui-palette-primary-main)' }}
+        >
+          {backPath === '/coach/athletes' ? 'Meus Alunos' : 'Atletas'}
+        </button>
         <i className='tabler-chevron-right text-base' />
         <span>{data.name}</span>
       </div>
 
-      {/* ── Hero Card (User-View style) ─────────────────────────────────── */}
+      {/* ── Hero Card ───────────────────────────────────────────────────── */}
       <div className='rounded-xl shadow-sm overflow-hidden' style={{ backgroundColor: 'var(--mui-palette-background-paper)' }}>
-        {/* Banner */}
         <div className='h-32 w-full' style={{
           background: 'linear-gradient(135deg, var(--mui-palette-primary-main), var(--mui-palette-primary-dark, #1565c0))'
         }} />
         <div className='px-6 pb-6'>
-          {/* Avatar + info principal */}
           <div className='flex flex-wrap items-end justify-between gap-4 -mt-10'>
             <div className='flex items-end gap-4'>
               <div className='rounded-full ring-4' style={{ ringColor: 'var(--mui-palette-background-paper)' }}>
@@ -154,13 +172,12 @@ export default function AthleteDetailView({ params }) {
             </div>
           </div>
 
-          {/* Stats rápidas */}
           <div className='mt-4 grid grid-cols-2 gap-3 sm:grid-cols-4'>
             {[
-              { icon: 'tabler-heart-rate-monitor', label: 'FC Máx',   value: fmt(hrMax, ' bpm'), color: 'text-error' },
-              { icon: 'tabler-weight',              label: 'Peso',     value: fmt(p.weight_kg, ' kg'), color: 'text-info' },
-              { icon: 'tabler-ruler',               label: 'Altura',   value: fmt(p.height_cm, ' cm'), color: 'text-success' },
-              { icon: 'tabler-calendar',            label: 'Matrícula',value: fmtDate(p.enrollment_date), color: 'text-primary' },
+              { icon: 'tabler-heart-rate-monitor', label: 'FC Máx',    value: fmt(hrMax, ' bpm'),          color: 'text-error'   },
+              { icon: 'tabler-weight',              label: 'Peso',      value: fmt(p.weight_kg, ' kg'),    color: 'text-info'    },
+              { icon: 'tabler-ruler',               label: 'Altura',    value: fmt(p.height_cm, ' cm'),    color: 'text-success' },
+              { icon: 'tabler-calendar',            label: 'Matrícula', value: fmtDate(p.enrollment_date), color: 'text-primary' },
             ].map(s => (
               <div key={s.label} className='flex items-center gap-3 rounded-xl p-3' style={{ backgroundColor: 'var(--mui-palette-action-hover)' }}>
                 <i className={`${s.icon} text-2xl ${s.color}`} />
@@ -189,25 +206,24 @@ export default function AthleteDetailView({ params }) {
         ))}
       </div>
 
-      {/* ── Tab: Visão Geral ─────────────────────────────────────────────── */}
+      {/* ── Tab: Visão Geral ───────────────────────────────────────────────────── */}
       {tab === 'overview' && (
         <div className='grid grid-cols-1 gap-6 lg:grid-cols-3'>
-          {/* Coluna esquerda (2/3) */}
           <div className='flex flex-col gap-6 lg:col-span-2'>
             <Card title='Dados Pessoais' icon='tabler-id-badge'>
-              <InfoRow label='Telefone'    value={fmt(data.phone)} />
-              <InfoRow label='Gênero'      value={GENDER[data.gender] ?? '—'} />
-              <InfoRow label='Nascimento'  value={fmtDate(data.birthdate)} />
-              <InfoRow label='Documento'   value={fmt(data.document)} />
+              <InfoRow label='Telefone'   value={fmt(data.phone)} />
+              <InfoRow label='Gênero'     value={GENDER[data.gender] ?? '—'} />
+              <InfoRow label='Nascimento' value={fmtDate(data.birthdate)} />
+              <InfoRow label='Documento'  value={fmt(data.document)} />
             </Card>
 
             <Card title='Ficha Esportiva' icon='tabler-heartbeat'>
-              <InfoRow label='FC Máxima'     value={fmt(hrMax, ' bpm')} />
-              <InfoRow label='FC Repouso'    value={fmt(p.hr_rest, ' bpm')} />
-              <InfoRow label='FC Limiar'     value={fmt(p.hr_threshold, ' bpm')} />
-              <InfoRow label='Peso'          value={fmt(p.weight_kg, ' kg')} />
-              <InfoRow label='Altura'        value={fmt(p.height_cm, ' cm')} />
-              <InfoRow label='% Gordura'     value={fmt(p.body_fat_pct, '%')} />
+              <InfoRow label='FC Máxima'   value={fmt(hrMax, ' bpm')} />
+              <InfoRow label='FC Repouso'  value={fmt(p.hr_rest, ' bpm')} />
+              <InfoRow label='FC Limiar'   value={fmt(p.hr_threshold, ' bpm')} />
+              <InfoRow label='Peso'        value={fmt(p.weight_kg, ' kg')} />
+              <InfoRow label='Altura'      value={fmt(p.height_cm, ' cm')} />
+              <InfoRow label='% Gordura'   value={fmt(p.body_fat_pct, '%')} />
               {p.goal && (
                 <div className='mt-3 rounded-lg p-3' style={{ backgroundColor: 'var(--mui-palette-action-hover)' }}>
                   <p className='text-xs font-medium mb-1' style={{ color: 'var(--mui-palette-text-secondary)' }}>Objetivo</p>
@@ -218,8 +234,8 @@ export default function AthleteDetailView({ params }) {
 
             {(p.emergency_contact || p.medical_notes) && (
               <Card title='Emergência & Saúde' icon='tabler-first-aid-kit'>
-                {p.emergency_contact && <InfoRow label='Contato' value={p.emergency_contact} />}
-                {p.emergency_phone   && <InfoRow label='Telefone' value={p.emergency_phone} />}
+                {p.emergency_contact && <InfoRow label='Contato'  value={p.emergency_contact} />}
+                {p.emergency_phone   && <InfoRow label='Telefone' value={p.emergency_phone}   />}
                 {p.medical_notes && (
                   <div className='mt-3 rounded-lg p-3' style={{ backgroundColor: 'rgb(var(--mui-palette-warning-mainChannel)/0.08)' }}>
                     <p className='text-xs font-medium mb-1' style={{ color: 'var(--mui-palette-warning-main)' }}>
@@ -232,34 +248,33 @@ export default function AthleteDetailView({ params }) {
             )}
           </div>
 
-          {/* Coluna direita (1/3) */}
           <div className='flex flex-col gap-6'>
-            {/* ACWR */}
             {data.acwr && (
               <Card title='ACWR' icon='tabler-chart-line'>
                 <div className='text-center py-2'>
                   <p className='text-4xl font-bold' style={{ color:
-                    data.acwr.acwr_value < 0.8 ? 'var(--mui-palette-info-main)' :
+                    data.acwr.acwr_value < 0.8  ? 'var(--mui-palette-info-main)'    :
                     data.acwr.acwr_value <= 1.3 ? 'var(--mui-palette-success-main)' :
                     'var(--mui-palette-error-main)'
                   }}>{Number(data.acwr.acwr_value).toFixed(2)}</p>
                   <p className='text-xs mt-1' style={{ color: 'var(--mui-palette-text-secondary)' }}>Índice carga aguda/crônica</p>
                   <p className='text-xs mt-3 rounded-lg px-2 py-1 inline-block' style={{
-                    backgroundColor: data.acwr.acwr_value < 0.8 ? 'rgb(var(--mui-palette-info-mainChannel)/0.1)' :
+                    backgroundColor:
+                      data.acwr.acwr_value < 0.8  ? 'rgb(var(--mui-palette-info-mainChannel)/0.1)'    :
                       data.acwr.acwr_value <= 1.3 ? 'rgb(var(--mui-palette-success-mainChannel)/0.1)' :
                       'rgb(var(--mui-palette-error-mainChannel)/0.1)',
-                    color: data.acwr.acwr_value < 0.8 ? 'var(--mui-palette-info-main)' :
+                    color:
+                      data.acwr.acwr_value < 0.8  ? 'var(--mui-palette-info-main)'    :
                       data.acwr.acwr_value <= 1.3 ? 'var(--mui-palette-success-main)' :
                       'var(--mui-palette-error-main)',
                   }}>
-                    {data.acwr.acwr_value < 0.8 ? 'Treino Insuficiente' :
+                    {data.acwr.acwr_value < 0.8  ? 'Treino Insuficiente' :
                      data.acwr.acwr_value <= 1.3 ? 'Zona Ideal' : 'Risco de Lesão'}
                   </p>
                 </div>
               </Card>
             )}
 
-            {/* Zonas de FC */}
             {zones.length > 0 && (
               <Card title='Zonas de FC' icon='tabler-activity'>
                 <div className='flex flex-col gap-2'>
@@ -268,7 +283,6 @@ export default function AthleteDetailView({ params }) {
               </Card>
             )}
 
-            {/* Sensor */}
             <Card title='Sensor ANT+' icon='tabler-bluetooth'>
               {sensor ? (
                 <>
@@ -291,7 +305,7 @@ export default function AthleteDetailView({ params }) {
         </div>
       )}
 
-      {/* ── Tab: Sessões ─────────────────────────────────────────────────── */}
+      {/* ── Tab: Sessões ──────────────────────────────────────────────────────── */}
       {tab === 'sessions' && (
         <Card title='Últimas Sessões' icon='tabler-run'>
           {data.recent_sessions?.length ? (
@@ -327,7 +341,7 @@ export default function AthleteDetailView({ params }) {
         </Card>
       )}
 
-      {/* ── Tab: Daily Logs ──────────────────────────────────────────────── */}
+      {/* ── Tab: Daily Logs ─────────────────────────────────────────────────── */}
       {tab === 'logs' && (
         <Card title='Daily Logs — Últimos 7 dias' icon='tabler-clipboard-list'>
           {data.recent_logs?.length ? (
@@ -340,11 +354,11 @@ export default function AthleteDetailView({ params }) {
                     <p className='font-semibold'>{fmtDate(log.log_date)}</p>
                   </div>
                   <div className='flex flex-wrap gap-4'>
-                    {[['Bem-estar','tabler-mood-smile',log.wellness_score,'text-success','/10'],
-                      ['Cansaço','tabler-zzz',log.fatigue_score,'text-warning','/10'],
-                      ['Dor musc.','tabler-bone',log.muscle_soreness,'text-error','/10'],
-                      ['Qualid. Sono','tabler-moon',log.sleep_quality,'text-info','/10'],
-                      ['Carga sub.','tabler-chart-bar',log.perceived_load,'text-primary','']
+                    {[['Bem-estar',    'tabler-mood-smile', log.wellness_score,   'text-success', '/10'],
+                      ['Cansaço',      'tabler-zzz',        log.fatigue_score,    'text-warning', '/10'],
+                      ['Dor musc.',    'tabler-bone',       log.muscle_soreness,  'text-error',   '/10'],
+                      ['Qualid. Sono', 'tabler-moon',       log.sleep_quality,    'text-info',    '/10'],
+                      ['Carga sub.',   'tabler-chart-bar',  log.perceived_load,   'text-primary', ''],
                     ].map(([l, icon, val, color, unit]) => val != null && (
                       <div key={l} className='flex items-center gap-1.5'>
                         <i className={`${icon} text-base ${color}`} />

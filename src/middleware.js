@@ -1,6 +1,4 @@
 // NODUS — Middleware de Proteção de Rotas com RBAC (8 roles)
-// LGPD: super_admin acessa apenas dados operacionais/agregados do seu escopo.
-// Dados pessoais de atletas, coaches e recepcionistas são isolados por tenant.
 import { withAuth } from 'next-auth/middleware'
 import { NextResponse } from 'next/server'
 
@@ -18,42 +16,37 @@ const STAFF_ROLES   = ['super_admin', 'tenant_admin', 'coach', 'academy_coach', 
 const COACH_ROLES   = ['tenant_admin', 'coach', 'academy_coach']
 const ATHLETE_ROLES = ['academy_athlete', 'coach_athlete', 'athlete']
 
-const ROUTE_PERMISSIONS = {
+// IMPORTANTE: rotas mais específicas devem vir ANTES das mais genéricas
+// Ex: '/coach_athlete' ANTES de '/coach', '/academy_athlete' ANTES de '/academy'
+// O algoritmo já ordena por comprimento (decrescente), mas é boa prática manter a ordem aqui
+const ROUTE_PERMISSIONS = [
+  // ── Rotas exclusivas por role (prefixo = role) — mais específicas primeiro ─
+  ['/academy_athlete',  ['academy_athlete']],
+  ['/coach_athlete',    ['coach_athlete']],
+  ['/academy_coach',    ['academy_coach']],
+  ['/admin',            ['super_admin']],
+  ['/academy',          ['tenant_admin']],
+  ['/coach',            ['coach']],
+  ['/recepcionist',     ['receptionist']],
+  ['/athlete',          ['athlete']],
 
-  // ──────────────────────────────────────────────────
-  // ROTAS EXCLUSIVAS POR ROLE (prefixo = role)
-  // ──────────────────────────────────────────────────
-  '/admin':            ['super_admin'],
-  '/academy':          ['tenant_admin'],
-  '/coach':            ['coach'],
-  '/academy_coach':    ['academy_coach'],
-  '/recepcionist':     ['receptionist'],
-  '/academy_athlete':  ['academy_athlete'],
-  '/coach_athlete':    ['coach_athlete'],
-  '/athlete':          ['athlete'],
+  // ── Rotas compartilhadas ──────────────────────────────────────────
+  ['/academies',        ['super_admin', 'tenant_admin']],
+  ['/coaches',          ['super_admin', 'tenant_admin']],
+  ['/athletes',         ['tenant_admin', 'academy_coach', 'receptionist']],
+  ['/monitoring',       [...COACH_ROLES, ...ATHLETE_ROLES]],
+  ['/planning',         COACH_ROLES],
+  ['/sessions',         [...COACH_ROLES, 'receptionist']],
+  ['/reports',          STAFF_ROLES],
+  ['/settings',         ALL_ROLES],
+  ['/receptionist',     ['receptionist']],
+  ['/daily-logs',       [...COACH_ROLES, ...ATHLETE_ROLES]],
 
-  // ──────────────────────────────────────────────────
-  // ROTAS COMPARTILHADAS
-  // ──────────────────────────────────────────────────
-  '/academies':        ['super_admin', 'tenant_admin'],
-  '/coaches':          ['super_admin', 'tenant_admin'],
-  '/athletes':         ['tenant_admin', 'academy_coach', 'receptionist'],  // coach usa /coach/athletes
-  '/monitoring':       [...COACH_ROLES, ...ATHLETE_ROLES],
-  '/planning':         COACH_ROLES,
-  '/sessions':         [...COACH_ROLES, 'receptionist'],
-  '/reports':          STAFF_ROLES,
-  '/settings':         ALL_ROLES,
-  '/receptionist':     ['receptionist'],
-  '/daily-logs':       [...COACH_ROLES, ...ATHLETE_ROLES],
+  // ── Rotas globais (todos os autenticados) ────────────────────────
+  ['/home',             ALL_ROLES],
+  ['/profile',          ALL_ROLES],
+]
 
-  // ──────────────────────────────────────────────────
-  // ROTAS GLOBAIS (todos os autenticados)
-  // ──────────────────────────────────────────────────
-  '/home':             ALL_ROLES,
-  '/profile':          ALL_ROLES,
-}
-
-// Rota de destino após login por role
 export const getHomeByRole = role => {
   const homes = {
     super_admin:        '/home',
@@ -64,12 +57,11 @@ export const getHomeByRole = role => {
     academy_athlete:    '/home',
     coach_athlete:      '/home',
     athlete:            '/home',
-    pending_onboarding: '/home', // evita 404 enquanto /onboarding não existe
+    pending_onboarding: '/home',
   }
   return homes[role] ?? '/home'
 }
 
-// Rota de configurações por role
 export const getSettingsByRole = role => {
   const map = {
     super_admin:     '/admin/settings',
@@ -93,12 +85,15 @@ export default withAuth(
     if (PUBLIC_ROUTES.some(r => pathname.startsWith(r))) return NextResponse.next()
     if (!token) return NextResponse.redirect(new URL('/login', req.url))
 
-    const matchedRoute = Object.keys(ROUTE_PERMISSIONS)
-      .filter(route => pathname.startsWith(route))
-      .sort((a, b) => b.length - a.length)[0]
+    // Encontra a rota mais específica (maior prefixo que bate)
+    // O array já está ordenado de mais específico para mais genérico
+    // mas garantimos pegando o de maior comprimento entre os que batem
+    const matched = ROUTE_PERMISSIONS
+      .filter(([route]) => pathname.startsWith(route))
+      .sort((a, b) => b[0].length - a[0].length)[0]
 
-    if (matchedRoute) {
-      const allowedRoles = ROUTE_PERMISSIONS[matchedRoute]
+    if (matched) {
+      const [, allowedRoles] = matched
       if (!allowedRoles.includes(role)) {
         return NextResponse.redirect(new URL(getHomeByRole(role), req.url))
       }
