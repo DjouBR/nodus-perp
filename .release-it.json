@@ -1,0 +1,28 @@
+{
+  "git": {
+    "commitMessage": "chore: release v${version}",
+    "tagName": "v${version}",
+    "requireCleanWorkingDir": false
+  },
+  "github": { "release": false },
+  "npm": { "publish": false },
+  "plugins": {
+    "@release-it/conventional-changelog": {
+      "preset": {
+        "name": "conventionalcommits",
+        "types": [
+          { "type": "feat",     "section": "Novas Funcionalidades" },
+          { "type": "fix",      "section": "Correcoes de Bugs" },
+          { "type": "docs",     "section": "Documentacao" },
+          { "type": "refactor", "section": "Refatoracoes" },
+          { "type": "perf",     "section": "Performance" },
+          { "type": "test",     "section": "Testes" },
+          { "type": "chore",    "section": "Manutencao", "hidden": true },
+          { "type": "style",    "section": "Estilo", "hidden": true }
+        ]
+      },
+      "infile": "CHANGELOG.md",
+      "header": "# NODUS - Changelog\n\nTodas as mudancas relevantes do projeto sao documentadas aqui.\n"
+    }
+  }
+}
