@@ -4,13 +4,13 @@ import { useState, useEffect, use } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 
 // ── Helpers ──────────────────────────────────────────────────────────────────────
-const fmt = (val, unit = '') => val ? `${val}${unit}` : '—'
+const fmt     = (val, unit = '') => val ? `${val}${unit}` : '—'
 const fmtDate = d => d ? new Date(d).toLocaleDateString('pt-BR') : '—'
 const GENDER  = { M: 'Masculino', F: 'Feminino', other: 'Outro' }
 const STATUS_STYLE = {
-  active:    { label: 'Ativo',     cls: 'bg-success/15 text-success' },
-  inactive:  { label: 'Inativo',   cls: 'bg-warning/15 text-warning' },
-  suspended: { label: 'Suspenso',  cls: 'bg-error/15 text-error'     },
+  active:    { label: 'Ativo',    cls: 'bg-success/15 text-success' },
+  inactive:  { label: 'Inativo',  cls: 'bg-warning/15 text-warning' },
+  suspended: { label: 'Suspenso', cls: 'bg-error/15 text-error'     },
 }
 const ZONE_COLORS = [
   { bg: 'bg-blue-500/15',   text: 'text-blue-500',   label: 'Z1 Recuperação'  },
@@ -19,6 +19,15 @@ const ZONE_COLORS = [
   { bg: 'bg-orange-500/15', text: 'text-orange-500', label: 'Z4 Anaeróbio'   },
   { bg: 'bg-red-500/15',    text: 'text-red-500',    label: 'Z5 Máximo'       },
 ]
+
+// Normaliza qualquer formato de data para yyyy-MM-dd
+const toDateInput = d => {
+  if (!d) return ''
+  if (/^\d{4}-\d{2}-\d{2}$/.test(d)) return d
+  const parsed = new Date(d)
+  if (isNaN(parsed.getTime())) return ''
+  return parsed.toISOString().slice(0, 10)
+}
 
 function Avatar({ name, avatar_url, size = 'lg' }) {
   const sz = size === 'lg' ? 'h-24 w-24 text-3xl' : 'h-10 w-10 text-sm'
@@ -58,7 +67,7 @@ function InfoRow({ label, value }) {
   )
 }
 
-function ZoneBadge({ zone, minBpm, maxBpm, idx }) {
+function ZoneBadge({ minBpm, maxBpm, idx }) {
   const c = ZONE_COLORS[idx] ?? ZONE_COLORS[0]
   return (
     <div className={`flex items-center justify-between rounded-lg px-3 py-2 ${c.bg}`}>
@@ -66,18 +75,16 @@ function ZoneBadge({ zone, minBpm, maxBpm, idx }) {
         <span className={`text-xs font-bold ${c.text}`}>Z{idx + 1}</span>
         <span className='text-xs' style={{ color: 'var(--mui-palette-text-secondary)' }}>{c.label}</span>
       </div>
-      <span className={`font-mono text-xs font-semibold ${c.text}`}>
-        {minBpm}–{maxBpm} bpm
-      </span>
+      <span className={`font-mono text-xs font-semibold ${c.text}`}>{minBpm}–{maxBpm} bpm</span>
     </div>
   )
 }
 
 export default function AthleteDetailView({ params, athleteId: propAthleteId, backPath = '/athletes', canEdit = false }) {
   const resolvedParams = params ? use(params) : null
-  const athleteId = propAthleteId ?? resolvedParams?.id
-  const router       = useRouter()
-  const searchParams = useSearchParams()
+  const athleteId     = propAthleteId ?? resolvedParams?.id
+  const router        = useRouter()
+  const searchParams  = useSearchParams()
 
   const [data, setData]         = useState(null)
   const [loading, setLoading]   = useState(true)
@@ -86,7 +93,6 @@ export default function AthleteDetailView({ params, athleteId: propAthleteId, ba
   const [saving, setSaving]     = useState(false)
   const [editForm, setEditForm] = useState({})
 
-  // Abre em modo edição se vier ?edit=1 na URL
   useEffect(() => {
     if (searchParams.get('edit') === '1') setEditMode(true)
   }, [searchParams])
@@ -99,18 +105,18 @@ export default function AthleteDetailView({ params, athleteId: propAthleteId, ba
       .then(d => {
         setData(d)
         setEditForm({
-          name:       d.name              ?? '',
-          email:      d.email             ?? '',
-          phone:      d.phone             ?? '',
-          birthdate:  d.birthdate         ?? '',
-          document:   d.document          ?? '',
-          gender:     d.gender            ?? '',
-          is_active:  d.is_active         ?? 1,
-          hr_max:     d.profile?.hr_max   ?? '',
-          hr_rest:    d.profile?.hr_rest  ?? '',
-          weight_kg:  d.profile?.weight_kg ?? '',
-          height_cm:  d.profile?.height_cm ?? '',
-          goal:       d.profile?.goal     ?? '',
+          name:      d.name               ?? '',
+          email:     d.email              ?? '',
+          phone:     d.phone              ?? '',
+          birthdate: toDateInput(d.birthdate),   // normaliza para yyyy-MM-dd
+          document:  d.document           ?? '',
+          gender:    d.gender             ?? '',
+          is_active: d.is_active          ?? 1,
+          hr_max:    d.profile?.hr_max    ?? '',
+          hr_rest:   d.profile?.hr_rest   ?? '',
+          weight_kg: d.profile?.weight_kg ?? '',
+          height_cm: d.profile?.height_cm ?? '',
+          goal:      d.profile?.goal      ?? '',
         })
       })
       .finally(() => setLoading(false))
@@ -126,7 +132,10 @@ export default function AthleteDetailView({ params, athleteId: propAthleteId, ba
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(editForm),
       })
-      if (!res.ok) throw new Error('Falha ao salvar')
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}))
+        throw new Error(err.error ?? 'Falha ao salvar')
+      }
       loadData()
       setEditMode(false)
     } catch (err) {
@@ -148,22 +157,15 @@ export default function AthleteDetailView({ params, athleteId: propAthleteId, ba
     <div className='flex h-64 flex-col items-center justify-center gap-3'>
       <i className='tabler-user-off text-5xl' style={{ color: 'var(--mui-palette-text-disabled)' }} />
       <p>Atleta não encontrado</p>
-      <button
-        onClick={() => router.push(backPath)}
-        className='text-sm underline'
-        style={{ color: 'var(--mui-palette-primary-main)' }}
-      >
-        Voltar
-      </button>
+      <button onClick={() => router.push(backPath)} className='text-sm underline' style={{ color: 'var(--mui-palette-primary-main)' }}>Voltar</button>
     </div>
   )
 
   const p      = data.profile ?? {}
   const sensor = data.sensor
   const status = STATUS_STYLE[p.status] ?? STATUS_STYLE.active
-
-  const hrMax = p.hr_max
-  const zones = hrMax ? [
+  const hrMax  = p.hr_max
+  const zones  = hrMax ? [
     { min: Math.round(hrMax * 0.50), max: p.zone1_max ?? Math.round(hrMax * 0.60) },
     { min: p.zone1_max ?? Math.round(hrMax * 0.60), max: p.zone2_max ?? Math.round(hrMax * 0.70) },
     { min: p.zone2_max ?? Math.round(hrMax * 0.70), max: p.zone3_max ?? Math.round(hrMax * 0.80) },
@@ -176,28 +178,20 @@ export default function AthleteDetailView({ params, athleteId: propAthleteId, ba
 
       {/* Breadcrumb */}
       <div className='flex items-center gap-2 text-sm' style={{ color: 'var(--mui-palette-text-secondary)' }}>
-        <button
-          onClick={() => router.push(backPath)}
-          className='hover:underline'
-          style={{ color: 'var(--mui-palette-primary-main)' }}
-        >
-          {backPath === '/coach/athletes' ? 'Meus Alunos' : 'Atletas'}
+        <button onClick={() => router.push(backPath)} className='hover:underline' style={{ color: 'var(--mui-palette-primary-main)' }}>
+          {backPath.includes('coach') ? 'Meus Alunos' : 'Atletas'}
         </button>
         <i className='tabler-chevron-right text-base' />
         <span>{data.name}</span>
       </div>
 
-      {/* ── Hero Card ───────────────────────────────────────────────────── */}
+      {/* Hero */}
       <div className='rounded-xl shadow-sm overflow-hidden' style={{ backgroundColor: 'var(--mui-palette-background-paper)' }}>
-        <div className='h-32 w-full' style={{
-          background: 'linear-gradient(135deg, var(--mui-palette-primary-main), var(--mui-palette-primary-dark, #1565c0))'
-        }} />
+        <div className='h-32 w-full' style={{ background: 'linear-gradient(135deg, var(--mui-palette-primary-main), var(--mui-palette-primary-dark, #1565c0))' }} />
         <div className='px-6 pb-6'>
           <div className='flex flex-wrap items-end justify-between gap-4 -mt-10'>
             <div className='flex items-end gap-4'>
-              <div className='rounded-full ring-4' style={{ ringColor: 'var(--mui-palette-background-paper)' }}>
-                <Avatar name={data.name} avatar_url={data.avatar_url} size='lg' />
-              </div>
+              <Avatar name={data.name} avatar_url={data.avatar_url} size='lg' />
               <div className='pb-1'>
                 <h1 className='text-xl font-bold'>{data.name}</h1>
                 <p className='text-sm' style={{ color: 'var(--mui-palette-text-secondary)' }}>{data.email}</p>
@@ -210,15 +204,13 @@ export default function AthleteDetailView({ params, athleteId: propAthleteId, ba
                   <i className='tabler-bluetooth text-sm' />Sensor #{sensor.serial}
                 </span>
               )}
-              {(canEdit || true) && (
-                <button
-                  onClick={() => setEditMode(v => !v)}
-                  className='ml-2 flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-xs font-medium hover:bg-action-hover'
-                >
-                  <i className={`text-sm ${editMode ? 'tabler-x' : 'tabler-edit'}`} />
-                  {editMode ? 'Cancelar' : 'Editar'}
-                </button>
-              )}
+              <button
+                onClick={() => setEditMode(v => !v)}
+                className='ml-2 flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-xs font-medium hover:bg-action-hover'
+              >
+                <i className={`text-sm ${editMode ? 'tabler-x' : 'tabler-edit'}`} />
+                {editMode ? 'Cancelar' : 'Editar'}
+              </button>
             </div>
           </div>
 
@@ -241,7 +233,7 @@ export default function AthleteDetailView({ params, athleteId: propAthleteId, ba
         </div>
       </div>
 
-      {/* ── Tabs ──────────────────────────────────────────────────────────── */}
+      {/* Tabs */}
       <div className='flex gap-1 rounded-xl p-1' style={{ backgroundColor: 'var(--mui-palette-background-paper)' }}>
         {[['overview','tabler-user','Visão Geral'],['sessions','tabler-run','Sessões'],['logs','tabler-clipboard-list','Daily Logs']].map(([id, icon, label]) => (
           <button key={id} onClick={() => setTab(id)}
@@ -256,7 +248,7 @@ export default function AthleteDetailView({ params, athleteId: propAthleteId, ba
         ))}
       </div>
 
-      {/* ── Tab: Visão Geral (visualização) ─────────────────────────────── */}
+      {/* Tab: Visão Geral (visualização) */}
       {tab === 'overview' && !editMode && (
         <div className='grid grid-cols-1 gap-6 lg:grid-cols-3'>
           <div className='flex flex-col gap-6 lg:col-span-2'>
@@ -268,12 +260,12 @@ export default function AthleteDetailView({ params, athleteId: propAthleteId, ba
             </Card>
 
             <Card title='Ficha Esportiva' icon='tabler-heartbeat'>
-              <InfoRow label='FC Máxima'   value={fmt(hrMax, ' bpm')} />
-              <InfoRow label='FC Repouso'  value={fmt(p.hr_rest, ' bpm')} />
-              <InfoRow label='FC Limiar'   value={fmt(p.hr_threshold, ' bpm')} />
-              <InfoRow label='Peso'        value={fmt(p.weight_kg, ' kg')} />
-              <InfoRow label='Altura'      value={fmt(p.height_cm, ' cm')} />
-              <InfoRow label='% Gordura'   value={fmt(p.body_fat_pct, '%')} />
+              <InfoRow label='FC Máxima'  value={fmt(hrMax, ' bpm')} />
+              <InfoRow label='FC Repouso' value={fmt(p.hr_rest, ' bpm')} />
+              <InfoRow label='FC Limiar'  value={fmt(p.hr_threshold, ' bpm')} />
+              <InfoRow label='Peso'       value={fmt(p.weight_kg, ' kg')} />
+              <InfoRow label='Altura'     value={fmt(p.height_cm, ' cm')} />
+              <InfoRow label='% Gordura'  value={fmt(p.body_fat_pct, '%')} />
               {p.goal && (
                 <div className='mt-3 rounded-lg p-3' style={{ backgroundColor: 'var(--mui-palette-action-hover)' }}>
                   <p className='text-xs font-medium mb-1' style={{ color: 'var(--mui-palette-text-secondary)' }}>Objetivo</p>
@@ -355,7 +347,7 @@ export default function AthleteDetailView({ params, athleteId: propAthleteId, ba
         </div>
       )}
 
-      {/* ── Tab: Visão Geral (edição) ────────────────────────────────────── */}
+      {/* Tab: Visão Geral (edição) */}
       {tab === 'overview' && editMode && (
         <Card title='Editar Atleta' icon='tabler-edit'>
           <div className='grid grid-cols-1 gap-4 sm:grid-cols-2'>
@@ -387,29 +379,25 @@ export default function AthleteDetailView({ params, athleteId: propAthleteId, ba
             <div>
               <label className='mb-1 block text-sm font-medium'>FC Máxima (bpm)</label>
               <input type='number' value={editForm.hr_max ?? ''} onChange={e => set('hr_max', e.target.value)}
-                className='w-full rounded-lg border bg-background px-3 py-2 text-sm outline-none focus:border-primary'
-                placeholder='Ex: 185' />
+                className='w-full rounded-lg border bg-background px-3 py-2 text-sm outline-none focus:border-primary' placeholder='Ex: 185' />
             </div>
 
             <div>
               <label className='mb-1 block text-sm font-medium'>FC Repouso (bpm)</label>
               <input type='number' value={editForm.hr_rest ?? ''} onChange={e => set('hr_rest', e.target.value)}
-                className='w-full rounded-lg border bg-background px-3 py-2 text-sm outline-none focus:border-primary'
-                placeholder='Ex: 60' />
+                className='w-full rounded-lg border bg-background px-3 py-2 text-sm outline-none focus:border-primary' placeholder='Ex: 60' />
             </div>
 
             <div>
               <label className='mb-1 block text-sm font-medium'>Peso (kg)</label>
               <input type='text' value={editForm.weight_kg ?? ''} onChange={e => set('weight_kg', e.target.value)}
-                className='w-full rounded-lg border bg-background px-3 py-2 text-sm outline-none focus:border-primary'
-                placeholder='Ex: 75.5' />
+                className='w-full rounded-lg border bg-background px-3 py-2 text-sm outline-none focus:border-primary' placeholder='Ex: 75.5' />
             </div>
 
             <div>
               <label className='mb-1 block text-sm font-medium'>Altura (cm)</label>
               <input type='text' value={editForm.height_cm ?? ''} onChange={e => set('height_cm', e.target.value)}
-                className='w-full rounded-lg border bg-background px-3 py-2 text-sm outline-none focus:border-primary'
-                placeholder='Ex: 175' />
+                className='w-full rounded-lg border bg-background px-3 py-2 text-sm outline-none focus:border-primary' placeholder='Ex: 175' />
             </div>
 
             <div className='sm:col-span-2'>
@@ -429,9 +417,7 @@ export default function AthleteDetailView({ params, athleteId: propAthleteId, ba
 
           <div className='mt-6 flex justify-end gap-3'>
             <button onClick={() => setEditMode(false)}
-              className='rounded-lg border px-4 py-2 text-sm hover:bg-action-hover'>
-              Cancelar
-            </button>
+              className='rounded-lg border px-4 py-2 text-sm hover:bg-action-hover'>Cancelar</button>
             <button onClick={handleSave} disabled={saving}
               className='flex items-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-medium text-white hover:bg-primary/90 disabled:opacity-60'>
               {saving && <i className='tabler-loader-2 animate-spin' />}
@@ -441,7 +427,7 @@ export default function AthleteDetailView({ params, athleteId: propAthleteId, ba
         </Card>
       )}
 
-      {/* ── Tab: Sessões ──────────────────────────────────────────────────────── */}
+      {/* Tab: Sessões */}
       {tab === 'sessions' && (
         <Card title='Últimas Sessões' icon='tabler-run'>
           {data.recent_sessions?.length ? (
@@ -477,24 +463,23 @@ export default function AthleteDetailView({ params, athleteId: propAthleteId, ba
         </Card>
       )}
 
-      {/* ── Tab: Daily Logs ─────────────────────────────────────────────────── */}
+      {/* Tab: Daily Logs */}
       {tab === 'logs' && (
         <Card title='Daily Logs — Últimos 7 dias' icon='tabler-clipboard-list'>
           {data.recent_logs?.length ? (
             <div className='flex flex-col gap-3'>
               {data.recent_logs.map((log, i) => (
-                <div key={i} className='flex flex-wrap items-center gap-4 rounded-xl p-4'
-                  style={{ backgroundColor: 'var(--mui-palette-action-hover)' }}>
+                <div key={i} className='flex flex-wrap items-center gap-4 rounded-xl p-4' style={{ backgroundColor: 'var(--mui-palette-action-hover)' }}>
                   <div className='min-w-[80px]'>
                     <p className='text-xs font-medium' style={{ color: 'var(--mui-palette-text-secondary)' }}>Data</p>
                     <p className='font-semibold'>{fmtDate(log.log_date)}</p>
                   </div>
                   <div className='flex flex-wrap gap-4'>
-                    {[['Bem-estar',    'tabler-mood-smile', log.wellness_score,   'text-success', '/10'],
-                      ['Cansaço',      'tabler-zzz',        log.fatigue_score,    'text-warning', '/10'],
-                      ['Dor musc.',    'tabler-bone',       log.muscle_soreness,  'text-error',   '/10'],
-                      ['Qualid. Sono', 'tabler-moon',       log.sleep_quality,    'text-info',    '/10'],
-                      ['Carga sub.',   'tabler-chart-bar',  log.perceived_load,   'text-primary', ''],
+                    {[['Bem-estar','tabler-mood-smile',log.wellness_score,'text-success','/10'],
+                      ['Cansaço','tabler-zzz',log.fatigue_score,'text-warning','/10'],
+                      ['Dor musc.','tabler-bone',log.muscle_soreness,'text-error','/10'],
+                      ['Qualid. Sono','tabler-moon',log.sleep_quality,'text-info','/10'],
+                      ['Carga sub.','tabler-chart-bar',log.perceived_load,'text-primary',''],
                     ].map(([l, icon, val, color, unit]) => val != null && (
                       <div key={l} className='flex items-center gap-1.5'>
                         <i className={`${icon} text-base ${color}`} />

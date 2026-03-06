@@ -2,11 +2,21 @@
 
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
+import { useSession } from 'next-auth/react'
 
-// ── Helpers ────────────────────────────────────────────────────────────────────
+// ── Helpers ──────────────────────────────────────────────────────────────────────
 const fmt     = (val, unit = '') => (val != null && val !== '') ? `${val}${unit}` : '—'
 const fmtDate = d => d ? new Date(d).toLocaleDateString('pt-BR') : '—'
 const fmtDT   = d => d ? new Date(d).toLocaleString('pt-BR', { dateStyle: 'short', timeStyle: 'short' }) : '—'
+
+// Normaliza qualquer formato de data para yyyy-MM-dd (necessário para <input type="date">)
+const toDateInput = d => {
+  if (!d) return ''
+  if (/^\d{4}-\d{2}-\d{2}$/.test(d)) return d
+  const parsed = new Date(d)
+  if (isNaN(parsed.getTime())) return ''
+  return parsed.toISOString().slice(0, 10)
+}
 
 const ROLE_LABELS = {
   coach:         { label: 'Independente', color: 'bg-warning/15 text-warning' },
@@ -14,17 +24,17 @@ const ROLE_LABELS = {
 }
 
 const SESSION_STATUS = {
-  scheduled: { label: 'Agendada',       color: 'bg-info/15 text-info'            },
-  active:    { label: 'Em andamento',   color: 'bg-success/15 text-success'      },
-  finished:  { label: 'Finalizada',     color: 'bg-secondary/15 text-secondary'  },
-  cancelled: { label: 'Cancelada',      color: 'bg-error/15 text-error'          },
+  scheduled: { label: 'Agendada',     color: 'bg-info/15 text-info'           },
+  active:    { label: 'Em andamento', color: 'bg-success/15 text-success'     },
+  finished:  { label: 'Finalizada',   color: 'bg-secondary/15 text-secondary' },
+  cancelled: { label: 'Cancelada',    color: 'bg-error/15 text-error'         },
 }
 
 const AVATAR_COLORS = ['#7367F0', '#28C76F', '#FF9F43', '#00CFE8', '#EA5455']
 function avatarColor(name = '') { return AVATAR_COLORS[name.charCodeAt(0) % AVATAR_COLORS.length] }
 function getInitials(name = '') { return name.split(' ').slice(0, 2).map(n => n[0]).join('').toUpperCase() }
 
-// ── Sub-componentes ──────────────────────────────────────────────────────────────
+// ── Sub-componentes ────────────────────────────────────────────────────────────────────
 function Avatar({ name = '', avatar_url, size = 'lg' }) {
   const sz = size === 'lg' ? 'h-24 w-24 text-3xl' : 'h-10 w-10 text-sm'
   if (avatar_url) return <img src={avatar_url} alt={name} className={`${sz} rounded-full object-cover`} />
@@ -76,15 +86,15 @@ function StatCard({ icon, label, value, color }) {
   )
 }
 
-// ── Componente principal ─────────────────────────────────────────────────────────────
 /**
  * Props:
  *   coachId   {string}  UUID do coach (obrigatório)
- *   backPath  {string}  Rota do breadcrumb e botão Voltar (default: '/coaches')
+ *   backPath  {string}  Rota do breadcrumb (default: '/coaches')
  *   backLabel {string}  Label do breadcrumb (default: 'Coaches')
  */
 export default function CoachDetailView({ coachId, backPath = '/coaches', backLabel = 'Coaches' }) {
   const router = useRouter()
+  const { data: session } = useSession()
 
   const [data, setData]         = useState(null)
   const [loading, setLoading]   = useState(true)
@@ -92,6 +102,9 @@ export default function CoachDetailView({ coachId, backPath = '/coaches', backLa
   const [editMode, setEditMode] = useState(false)
   const [saving, setSaving]     = useState(false)
   const [editForm, setEditForm] = useState({})
+
+  // Roles que podem editar professores
+  const canEdit = ['super_admin', 'tenant_admin'].includes(session?.user?.role)
 
   useEffect(() => {
     fetch(`/api/coaches/${coachId}`)
@@ -102,7 +115,7 @@ export default function CoachDetailView({ coachId, backPath = '/coaches', backLa
           name:        d.name              ?? '',
           email:       d.email             ?? '',
           phone:       d.phone             ?? '',
-          birthdate:   d.birthdate         ?? '',
+          birthdate:   toDateInput(d.birthdate),  // normaliza para yyyy-MM-dd
           document:    d.document          ?? '',
           gender:      d.gender            ?? '',
           is_active:   d.is_active         ?? 1,
@@ -123,10 +136,15 @@ export default function CoachDetailView({ coachId, backPath = '/coaches', backLa
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(editForm),
       })
-      if (!res.ok) throw new Error('Falha ao salvar')
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}))
+        throw new Error(err.error ?? 'Falha ao salvar')
+      }
       const updated = await fetch(`/api/coaches/${coachId}`).then(r => r.json())
       setData(updated)
       setEditMode(false)
+    } catch (err) {
+      alert(err.message)
     } finally {
       setSaving(false)
     }
@@ -134,7 +152,6 @@ export default function CoachDetailView({ coachId, backPath = '/coaches', backLa
 
   const set = (k, v) => setEditForm(f => ({ ...f, [k]: v }))
 
-  // ── Estados de carregamento / erro ─────────────────────────────────────────
   if (loading) return (
     <div className='flex h-64 items-center justify-center'>
       <i className='tabler-loader-2 animate-spin text-4xl' style={{ color: 'var(--mui-palette-primary-main)' }} />
@@ -179,14 +196,13 @@ export default function CoachDetailView({ coachId, backPath = '/coaches', backLa
         <span>{data.name}</span>
       </div>
 
-      {/* ── Hero Card ──────────────────────────────────────────────────────────────── */}
+      {/* ── Hero Card ─────────────────────────────────────────────────────────────────── */}
       <div className='overflow-hidden rounded-xl shadow-sm' style={{ backgroundColor: 'var(--mui-palette-background-paper)' }}>
         <div className='h-32 w-full' style={{
           background: 'linear-gradient(135deg, var(--mui-palette-secondary-main, #82868b), var(--mui-palette-primary-main))'
         }} />
         <div className='px-6 pb-6'>
           <div className='flex flex-wrap items-end justify-between gap-4 -mt-10'>
-            {/* Avatar + nome */}
             <div className='flex items-end gap-4'>
               <Avatar name={data.name} avatar_url={data.avatar_url} size='lg' />
               <div className='pb-1'>
@@ -198,7 +214,7 @@ export default function CoachDetailView({ coachId, backPath = '/coaches', backLa
               </div>
             </div>
 
-            {/* Badges + botão editar */}
+            {/* Badges + botão editar (só para super_admin e tenant_admin) */}
             <div className='flex items-center gap-2 pb-1'>
               <span className={`rounded-full px-3 py-1 text-xs font-semibold ${roleInfo.color}`}>
                 {roleInfo.label}
@@ -208,27 +224,28 @@ export default function CoachDetailView({ coachId, backPath = '/coaches', backLa
               }`}>
                 {data.is_active ? 'Ativo' : 'Inativo'}
               </span>
-              <button
-                onClick={() => setEditMode(v => !v)}
-                className='ml-2 flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-xs font-medium hover:bg-action-hover'
-              >
-                <i className={`text-sm ${editMode ? 'tabler-x' : 'tabler-edit'}`} />
-                {editMode ? 'Cancelar' : 'Editar'}
-              </button>
+              {canEdit && (
+                <button
+                  onClick={() => setEditMode(v => !v)}
+                  className='ml-2 flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-xs font-medium hover:bg-action-hover'
+                >
+                  <i className={`text-sm ${editMode ? 'tabler-x' : 'tabler-edit'}`} />
+                  {editMode ? 'Cancelar' : 'Editar'}
+                </button>
+              )}
             </div>
           </div>
 
-          {/* Stats rápidas */}
           <div className='mt-4 grid grid-cols-2 gap-3 sm:grid-cols-4'>
-            <StatCard icon='tabler-calendar-stats' label='Sessões ministradas'  value={stats.total_sessions ?? 0}  color='text-primary' />
-            <StatCard icon='tabler-users'           label='Atletas atendidos'    value={stats.total_athletes ?? 0}  color='text-success' />
-            <StatCard icon='tabler-calendar'        label='Membro desde'         value={fmtDate(data.created_at)}   color='text-info'    />
-            <StatCard icon='tabler-login'           label='Último acesso'        value={fmtDate(data.last_login)}   color='text-warning' />
+            <StatCard icon='tabler-calendar-stats' label='Sessões ministradas' value={stats.total_sessions ?? 0} color='text-primary' />
+            <StatCard icon='tabler-users'           label='Atletas atendidos'   value={stats.total_athletes ?? 0} color='text-success' />
+            <StatCard icon='tabler-calendar'        label='Membro desde'        value={fmtDate(data.created_at)}  color='text-info'    />
+            <StatCard icon='tabler-login'           label='Último acesso'       value={fmtDate(data.last_login)}   color='text-warning' />
           </div>
         </div>
       </div>
 
-      {/* ── Tabs ──────────────────────────────────────────────────────────────────── */}
+      {/* ── Tabs ─────────────────────────────────────────────────────────────────────── */}
       <div className='flex gap-1 rounded-xl p-1' style={{ backgroundColor: 'var(--mui-palette-background-paper)' }}>
         {[
           ['overview', 'tabler-user',           'Perfil'],
@@ -248,7 +265,7 @@ export default function CoachDetailView({ coachId, backPath = '/coaches', backLa
         ))}
       </div>
 
-      {/* ── Tab Perfil (visualização) ──────────────────────────────────────────────────── */}
+      {/* ── Tab Perfil (visualização) ───────────────────────────────────────────────────── */}
       {tab === 'overview' && !editMode && (
         <div className='grid grid-cols-1 gap-6 lg:grid-cols-3'>
           <div className='flex flex-col gap-6 lg:col-span-2'>
@@ -286,8 +303,8 @@ export default function CoachDetailView({ coachId, backPath = '/coaches', backLa
             <Card title='Resumo de Atividade' icon='tabler-chart-bar'>
               <div className='flex flex-col gap-3'>
                 {[
-                  ['tabler-calendar-stats', 'text-primary',  'Total de Sessões',   stats.total_sessions ?? 0],
-                  ['tabler-users',          'text-success',  'Atletas Atendidos',  stats.total_athletes ?? 0],
+                  ['tabler-calendar-stats', 'text-primary', 'Total de Sessões',  stats.total_sessions ?? 0],
+                  ['tabler-users',          'text-success', 'Atletas Atendidos', stats.total_athletes ?? 0],
                 ].map(([icon, color, label, val]) => (
                   <div key={label} className='flex items-center justify-between rounded-xl p-3' style={{ backgroundColor: 'var(--mui-palette-action-hover)' }}>
                     <div className='flex items-center gap-2'>
@@ -304,7 +321,7 @@ export default function CoachDetailView({ coachId, backPath = '/coaches', backLa
               <Card title='Última Sessão' icon='tabler-run'>
                 <div className='flex flex-col gap-2'>
                   <p className='font-semibold'>{data.recent_sessions[0].name}</p>
-                  <InfoRow label='Data'         value={fmtDT(data.recent_sessions[0].start_datetime)} />
+                  <InfoRow label='Data'          value={fmtDT(data.recent_sessions[0].start_datetime)} />
                   <InfoRow label='Duração'      value={fmt(data.recent_sessions[0].duration_min, ' min')} />
                   <InfoRow label='Participantes' value={fmt(data.recent_sessions[0].participants_count)} />
                   <InfoRow label='FC Média'      value={fmt(data.recent_sessions[0].avg_hr, ' bpm')} />
@@ -320,8 +337,8 @@ export default function CoachDetailView({ coachId, backPath = '/coaches', backLa
         </div>
       )}
 
-      {/* ── Tab Perfil (edição) ─────────────────────────────────────────────────────────── */}
-      {tab === 'overview' && editMode && (
+      {/* ── Tab Perfil (edição) ───────────────────────────────────────────────────────────── */}
+      {tab === 'overview' && editMode && canEdit && (
         <Card title='Editar Coach' icon='tabler-edit'>
           <div className='grid grid-cols-1 gap-4 sm:grid-cols-2'>
             {[['Nome completo','name','text'],['Email','email','email'],['Telefone','phone','text'],['Documento (CPF)','document','text']].map(([lbl, key, type]) => (
