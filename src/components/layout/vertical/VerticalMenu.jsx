@@ -220,6 +220,28 @@ const VerticalMenu = ({ scrollMenu }) => {
         )}
 
         {/* ═══════════════════════════════════════════════════════════════
+            ALUNO DO TREINADOR INDEPENDENTE (coach_athlete)
+        ═══════════════════════════════════════════════════════════════ */}
+        {role === 'coach_athlete' && (
+          <>
+            <MenuItem href='/home' icon={<i className='tabler-smart-home' />}>Início</MenuItem>
+            <MenuSection label='Treino'>
+              <MenuItem href='/coach_athlete/monitoring' icon={<i className='tabler-heart-rate-monitor' />}>Monitoramento</MenuItem>
+              <MenuItem href='/coach_athlete/prescription' icon={<i className='tabler-clipboard-text' />}>Meu Treino</MenuItem>
+              <MenuItem href='/coach_athlete/preworkout' icon={<i className='tabler-bolt' />}>Pré Treino</MenuItem>
+              <MenuItem href='/coach_athlete/postworkout' icon={<i className='tabler-moon' />}>Pós Treino</MenuItem>
+            </MenuSection>
+            <MenuSection label='Histórico'>
+              <MenuItem href='/coach_athlete/history' icon={<i className='tabler-history' />}>Histórico de Treinos</MenuItem>
+              <MenuItem href='/coach_athlete/evolution' icon={<i className='tabler-chart-line' />}>Minha Evolução</MenuItem>
+            </MenuSection>
+            <MenuSection label='Diversos'>
+              <MenuItem href='/coach_athlete/config' icon={<i className='tabler-settings' />}>Configurações</MenuItem>
+            </MenuSection>
+          </>
+        )}
+
+        {/* ═══════════════════════════════════════════════════════════════
             ATLETA INDEPENDENTE (athlete)
         ═══════════════════════════════════════════════════════════════ */}
         {role === 'athlete' && (
