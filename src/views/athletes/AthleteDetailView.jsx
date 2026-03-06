@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect, use } from 'react'
-import { useRouter } from 'next/navigation'
+import { useRouter, useSearchParams } from 'next/navigation'
 
 // ── Helpers ──────────────────────────────────────────────────────────────────────
 const fmt = (val, unit = '') => val ? `${val}${unit}` : '—'
@@ -73,29 +73,70 @@ function ZoneBadge({ zone, minBpm, maxBpm, idx }) {
   )
 }
 
-// ── Componente principal ─────────────────────────────────────────────────────────────────────
-// Aceita 2 formas de uso:
-//   1) Via page route: <AthleteDetailView params={params} />
-//      - params é o objeto Next.js com { id }
-//      - backPath define para onde o breadcrumb/voltar aponta (padrão: /athletes)
-//   2) Via component: <AthleteDetailView athleteId="uuid" backPath="/coach/athletes" />
-export default function AthleteDetailView({ params, athleteId: propAthleteId, backPath = '/athletes' }) {
-  // Suporta tanto params (page route) quanto athleteId direto (component)
+export default function AthleteDetailView({ params, athleteId: propAthleteId, backPath = '/athletes', canEdit = false }) {
   const resolvedParams = params ? use(params) : null
   const athleteId = propAthleteId ?? resolvedParams?.id
-  const router    = useRouter()
+  const router       = useRouter()
+  const searchParams = useSearchParams()
 
-  const [data, setData]       = useState(null)
-  const [loading, setLoading] = useState(true)
-  const [tab, setTab]         = useState('overview')
+  const [data, setData]         = useState(null)
+  const [loading, setLoading]   = useState(true)
+  const [tab, setTab]           = useState('overview')
+  const [editMode, setEditMode] = useState(false)
+  const [saving, setSaving]     = useState(false)
+  const [editForm, setEditForm] = useState({})
 
+  // Abre em modo edição se vier ?edit=1 na URL
   useEffect(() => {
+    if (searchParams.get('edit') === '1') setEditMode(true)
+  }, [searchParams])
+
+  const loadData = () => {
     if (!athleteId) return
+    setLoading(true)
     fetch(`/api/athletes/${athleteId}`)
       .then(r => r.json())
-      .then(setData)
+      .then(d => {
+        setData(d)
+        setEditForm({
+          name:       d.name              ?? '',
+          email:      d.email             ?? '',
+          phone:      d.phone             ?? '',
+          birthdate:  d.birthdate         ?? '',
+          document:   d.document          ?? '',
+          gender:     d.gender            ?? '',
+          is_active:  d.is_active         ?? 1,
+          hr_max:     d.profile?.hr_max   ?? '',
+          hr_rest:    d.profile?.hr_rest  ?? '',
+          weight_kg:  d.profile?.weight_kg ?? '',
+          height_cm:  d.profile?.height_cm ?? '',
+          goal:       d.profile?.goal     ?? '',
+        })
+      })
       .finally(() => setLoading(false))
-  }, [athleteId])
+  }
+
+  useEffect(() => { loadData() }, [athleteId])
+
+  const handleSave = async () => {
+    setSaving(true)
+    try {
+      const res = await fetch(`/api/athletes/${athleteId}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(editForm),
+      })
+      if (!res.ok) throw new Error('Falha ao salvar')
+      loadData()
+      setEditMode(false)
+    } catch (err) {
+      alert(err.message)
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  const set = (k, v) => setEditForm(f => ({ ...f, [k]: v }))
 
   if (loading) return (
     <div className='flex h-64 items-center justify-center'>
@@ -133,7 +174,7 @@ export default function AthleteDetailView({ params, athleteId: propAthleteId, ba
   return (
     <div className='flex flex-col gap-6'>
 
-      {/* Breadcrumb com backPath dinâmico */}
+      {/* Breadcrumb */}
       <div className='flex items-center gap-2 text-sm' style={{ color: 'var(--mui-palette-text-secondary)' }}>
         <button
           onClick={() => router.push(backPath)}
@@ -168,6 +209,15 @@ export default function AthleteDetailView({ params, athleteId: propAthleteId, ba
                 <span className='flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-semibold bg-info/15 text-info'>
                   <i className='tabler-bluetooth text-sm' />Sensor #{sensor.serial}
                 </span>
+              )}
+              {(canEdit || true) && (
+                <button
+                  onClick={() => setEditMode(v => !v)}
+                  className='ml-2 flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-xs font-medium hover:bg-action-hover'
+                >
+                  <i className={`text-sm ${editMode ? 'tabler-x' : 'tabler-edit'}`} />
+                  {editMode ? 'Cancelar' : 'Editar'}
+                </button>
               )}
             </div>
           </div>
@@ -206,8 +256,8 @@ export default function AthleteDetailView({ params, athleteId: propAthleteId, ba
         ))}
       </div>
 
-      {/* ── Tab: Visão Geral ───────────────────────────────────────────────────── */}
-      {tab === 'overview' && (
+      {/* ── Tab: Visão Geral (visualização) ─────────────────────────────── */}
+      {tab === 'overview' && !editMode && (
         <div className='grid grid-cols-1 gap-6 lg:grid-cols-3'>
           <div className='flex flex-col gap-6 lg:col-span-2'>
             <Card title='Dados Pessoais' icon='tabler-id-badge'>
@@ -303,6 +353,92 @@ export default function AthleteDetailView({ params, athleteId: propAthleteId, ba
             </Card>
           </div>
         </div>
+      )}
+
+      {/* ── Tab: Visão Geral (edição) ────────────────────────────────────── */}
+      {tab === 'overview' && editMode && (
+        <Card title='Editar Atleta' icon='tabler-edit'>
+          <div className='grid grid-cols-1 gap-4 sm:grid-cols-2'>
+            {[['Nome completo','name','text'],['Email','email','email'],['Telefone','phone','text'],['Documento (CPF)','document','text']].map(([lbl, key, type]) => (
+              <div key={key}>
+                <label className='mb-1 block text-sm font-medium'>{lbl}</label>
+                <input type={type} value={editForm[key] ?? ''} onChange={e => set(key, e.target.value)}
+                  className='w-full rounded-lg border bg-background px-3 py-2 text-sm outline-none focus:border-primary' />
+              </div>
+            ))}
+
+            <div>
+              <label className='mb-1 block text-sm font-medium'>Nascimento</label>
+              <input type='date' value={editForm.birthdate ?? ''} onChange={e => set('birthdate', e.target.value)}
+                className='w-full rounded-lg border bg-background px-3 py-2 text-sm outline-none focus:border-primary' />
+            </div>
+
+            <div>
+              <label className='mb-1 block text-sm font-medium'>Gênero</label>
+              <select value={editForm.gender ?? ''} onChange={e => set('gender', e.target.value)}
+                className='w-full rounded-lg border bg-background px-3 py-2 text-sm outline-none focus:border-primary'>
+                <option value=''>Não informado</option>
+                <option value='M'>Masculino</option>
+                <option value='F'>Feminino</option>
+                <option value='other'>Outro</option>
+              </select>
+            </div>
+
+            <div>
+              <label className='mb-1 block text-sm font-medium'>FC Máxima (bpm)</label>
+              <input type='number' value={editForm.hr_max ?? ''} onChange={e => set('hr_max', e.target.value)}
+                className='w-full rounded-lg border bg-background px-3 py-2 text-sm outline-none focus:border-primary'
+                placeholder='Ex: 185' />
+            </div>
+
+            <div>
+              <label className='mb-1 block text-sm font-medium'>FC Repouso (bpm)</label>
+              <input type='number' value={editForm.hr_rest ?? ''} onChange={e => set('hr_rest', e.target.value)}
+                className='w-full rounded-lg border bg-background px-3 py-2 text-sm outline-none focus:border-primary'
+                placeholder='Ex: 60' />
+            </div>
+
+            <div>
+              <label className='mb-1 block text-sm font-medium'>Peso (kg)</label>
+              <input type='text' value={editForm.weight_kg ?? ''} onChange={e => set('weight_kg', e.target.value)}
+                className='w-full rounded-lg border bg-background px-3 py-2 text-sm outline-none focus:border-primary'
+                placeholder='Ex: 75.5' />
+            </div>
+
+            <div>
+              <label className='mb-1 block text-sm font-medium'>Altura (cm)</label>
+              <input type='text' value={editForm.height_cm ?? ''} onChange={e => set('height_cm', e.target.value)}
+                className='w-full rounded-lg border bg-background px-3 py-2 text-sm outline-none focus:border-primary'
+                placeholder='Ex: 175' />
+            </div>
+
+            <div className='sm:col-span-2'>
+              <label className='mb-1 block text-sm font-medium'>Objetivo</label>
+              <textarea rows={2} value={editForm.goal ?? ''} onChange={e => set('goal', e.target.value)}
+                className='w-full resize-none rounded-lg border bg-background px-3 py-2 text-sm outline-none focus:border-primary'
+                placeholder='Ex: Perda de peso, condicionamento para Hyrox...' />
+            </div>
+
+            <div className='flex items-center gap-2'>
+              <input type='checkbox' id='is_active_athlete' checked={!!editForm.is_active}
+                onChange={e => set('is_active', e.target.checked ? 1 : 0)}
+                className='h-4 w-4 accent-primary' />
+              <label htmlFor='is_active_athlete' className='text-sm'>Ativo</label>
+            </div>
+          </div>
+
+          <div className='mt-6 flex justify-end gap-3'>
+            <button onClick={() => setEditMode(false)}
+              className='rounded-lg border px-4 py-2 text-sm hover:bg-action-hover'>
+              Cancelar
+            </button>
+            <button onClick={handleSave} disabled={saving}
+              className='flex items-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-medium text-white hover:bg-primary/90 disabled:opacity-60'>
+              {saving && <i className='tabler-loader-2 animate-spin' />}
+              Salvar alterações
+            </button>
+          </div>
+        </Card>
       )}
 
       {/* ── Tab: Sessões ──────────────────────────────────────────────────────── */}

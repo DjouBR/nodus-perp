@@ -3,7 +3,7 @@
 import { useState } from 'react'
 import { useSession } from 'next-auth/react'
 
-const INITIAL = { name: '', email: '', password: '', specialty: '', phone: '' }
+const INITIAL = { name: '', email: '', specialty: '', phone: '' }
 
 export default function CoachAddModal({ onClose, onSuccess }) {
   const { data: session } = useSession()
@@ -16,12 +16,8 @@ export default function CoachAddModal({ onClose, onSuccess }) {
   const handleSubmit = async (e) => {
     e.preventDefault()
     setError('')
-    if (!form.name || !form.email || !form.password) {
-      setError('Nome, email e senha s\u00e3o obrigat\u00f3rios.')
-      return
-    }
-    if (form.password.length < 6) {
-      setError('A senha deve ter no m\u00ednimo 6 caracteres.')
+    if (!form.name || !form.email) {
+      setError('Nome e email são obrigatórios.')
       return
     }
     setLoading(true)
@@ -41,10 +37,9 @@ export default function CoachAddModal({ onClose, onSuccess }) {
     }
   }
 
-  // Informa ao usu\u00e1rio qual role ser\u00e1 criado automaticamente
   const rolePreview = session?.user?.role === 'super_admin'
     ? { label: 'Coach Independente', color: 'text-warning', icon: 'tabler-user-star' }
-    : { label: 'Professor da Academia', color: 'text-info',    icon: 'tabler-school' }
+    : { label: 'Professor da Academia', color: 'text-info', icon: 'tabler-school' }
 
   return (
     <div className='fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4'>
@@ -53,10 +48,9 @@ export default function CoachAddModal({ onClose, onSuccess }) {
         <div className='flex items-center justify-between px-6 py-4' style={{ borderBottom: '1px solid var(--mui-palette-divider)' }}>
           <div>
             <h2 className='text-lg font-semibold'>Novo Coach / Treinador</h2>
-            {/* Badge mostrando qual role ser\u00e1 criado */}
             <div className={`mt-1 flex items-center gap-1.5 text-xs font-medium ${rolePreview.color}`}>
               <i className={`${rolePreview.icon} text-sm`} />
-              Ser\u00e1 cadastrado como: <strong>{rolePreview.label}</strong>
+              Será cadastrado como: <strong>{rolePreview.label}</strong>
             </div>
           </div>
           <button onClick={onClose} className='rounded-lg p-1 hover:bg-action-hover'>
@@ -88,20 +82,13 @@ export default function CoachAddModal({ onClose, onSuccess }) {
             </div>
 
             <div>
-              <label className='mb-1 block text-sm font-medium'>Senha provis\u00f3ria *</label>
-              <input type='password' value={form.password} onChange={e => set('password', e.target.value)}
-                className='w-full rounded-lg border bg-background px-3 py-2 text-sm outline-none focus:border-primary'
-                placeholder='M\u00ednimo 6 caracteres' />
-            </div>
-
-            <div>
               <label className='mb-1 block text-sm font-medium'>Telefone</label>
               <input type='text' value={form.phone} onChange={e => set('phone', e.target.value)}
                 className='w-full rounded-lg border bg-background px-3 py-2 text-sm outline-none focus:border-primary'
                 placeholder='(11) 99999-9999' />
             </div>
 
-            <div>
+            <div className='col-span-2'>
               <label className='mb-1 block text-sm font-medium'>Especialidade</label>
               <input type='text' value={form.specialty} onChange={e => set('specialty', e.target.value)}
                 className='w-full rounded-lg border bg-background px-3 py-2 text-sm outline-none focus:border-primary'
@@ -111,7 +98,7 @@ export default function CoachAddModal({ onClose, onSuccess }) {
 
           <p className='text-xs' style={{ color: 'var(--mui-palette-text-secondary)' }}>
             <i className='tabler-info-circle mr-1' />
-            O professor receber\u00e1 um link por email para redefinir a senha (pr\u00f3xima fase).
+            A senha provisória <strong>nodus@123</strong> será definida automaticamente. O professor poderá alterá-la no primeiro acesso.
           </p>
 
           <div className='flex justify-end gap-3 pt-2'>

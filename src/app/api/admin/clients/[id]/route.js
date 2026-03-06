@@ -1,8 +1,8 @@
 import { NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/libs/auth'
-import { db } from '@/lib/db'
-import { users, tenants, coach_profiles, athlete_profiles } from '@/lib/db/schema'
+import { db } from '@/lib/db/index.js'
+import { users, tenants, coach_profiles, athlete_profiles } from '@/lib/db/schema/index.js'
 import { eq } from 'drizzle-orm'
 
 export async function GET(request, { params }) {
@@ -46,16 +46,19 @@ export async function PUT(request, { params }) {
     const body = await request.json()
     const { name, email, phone, document, birthdate, gender, is_active, role } = body
 
-    await db.update(users).set({
-      ...(name       != null && { name }),
-      ...(email      != null && { email }),
-      ...(phone      != null && { phone }),
-      ...(document   != null && { document }),
-      ...(birthdate  != null && { birthdate }),
-      ...(gender     != null && { gender }),
-      ...(is_active  != null && { is_active }),
-      ...(role       != null && { role }),
-    }).where(eq(users.id, id))
+    // Monta apenas campos presentes (sem updated_at — MySQL gerencia via onUpdateNow)
+    const updateData = {}
+    if (name      != null) updateData.name      = name
+    if (email     != null) updateData.email     = email
+    if (phone     != null) updateData.phone     = phone
+    if (document  != null) updateData.document  = document
+    if (birthdate != null) updateData.birthdate = birthdate || null
+    if (gender    != null) updateData.gender    = gender || null
+    if (is_active != null) updateData.is_active = is_active ? 1 : 0
+    if (role      != null) updateData.role      = role
+
+    if (Object.keys(updateData).length > 0)
+      await db.update(users).set(updateData).where(eq(users.id, id))
 
     return NextResponse.json({ ok: true })
   } catch (err) {

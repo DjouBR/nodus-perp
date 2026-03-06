@@ -24,7 +24,7 @@ function Avatar({ name, avatar_url }) {
 
 export default function AthleteTable({
   athletes, loading, page, totalPages, perPage, total, onPageChange, onRefresh, canManage,
-  detailBasePath = '/athletes'  // ← cada role passa o seu prefixo de rota
+  detailBasePath = '/athletes'
 }) {
   const router = useRouter()
 
@@ -135,13 +135,22 @@ export default function AthleteTable({
                         <i className='tabler-eye text-lg' />
                       </button>
                       {canManage && (
-                        <button
-                          title='Inativar'
-                          onClick={() => handleInactivate(a.id, a.name)}
-                          className='rounded-lg p-1.5 text-textSecondary hover:bg-error/10 hover:text-error transition-colors'
-                        >
-                          <i className='tabler-user-off text-lg' />
-                        </button>
+                        <>
+                          <button
+                            title='Editar atleta'
+                            onClick={() => router.push(`${detailBasePath}/${a.id}?edit=1`)}
+                            className='rounded-lg p-1.5 text-textSecondary hover:bg-info/10 hover:text-info transition-colors'
+                          >
+                            <i className='tabler-edit text-lg' />
+                          </button>
+                          <button
+                            title='Inativar'
+                            onClick={() => handleInactivate(a.id, a.name)}
+                            className='rounded-lg p-1.5 text-textSecondary hover:bg-error/10 hover:text-error transition-colors'
+                          >
+                            <i className='tabler-user-off text-lg' />
+                          </button>
+                        </>
                       )}
                     </div>
                   </td>
