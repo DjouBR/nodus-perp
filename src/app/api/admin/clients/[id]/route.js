@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
-import { authOptions } from '@/lib/auth'
+import { authOptions } from '@/libs/auth'
 import { db } from '@/lib/db'
 import { users, tenants, coach_profiles, athlete_profiles } from '@/lib/db/schema'
 import { eq } from 'drizzle-orm'
