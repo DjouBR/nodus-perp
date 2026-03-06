@@ -9,12 +9,13 @@
 
 | Camada | Tecnologia |
 |---|---|
-| Frontend | Next.js 15, React, MUI v6, Vuexy Template |
+| Frontend | Next.js 15 (App Router), React 19, MUI v7, Vuexy Template |
 | Backend | Next.js API Routes (Node.js) |
 | Banco de Dados | MySQL + Drizzle ORM |
-| Autenticação | NextAuth.js (JWT) |
-| Estilo | Tailwind CSS + MUI |
+| Autenticação | NextAuth.js v4 (JWT + OAuth) |
+| Estilo | Tailwind CSS v4 + MUI |
 | Hardware | ANT+ USB via WebSocket |
+| Changelog | release-it + @release-it/conventional-changelog |
 | Deploy | (a definir) |
 
 ---
@@ -45,16 +46,16 @@
 
 ### Banco de Dados
 - [x] Schema MySQL completo via Drizzle ORM
-  - Tabelas: `tenants`, `users`, `athlete_profiles`, `sensors`, `training_sessions`, `session_athletes`, `heart_rate`, `daily_logs`, `weekly_indices`, `plans`
+  - Tabelas: `tenants`, `users`, `athlete_profiles`, `coach_profiles`, `sensors`, `training_sessions`, `session_athletes`, `heart_rate`, `daily_logs`, `weekly_indices`, `plans`
 - [x] Script de migration (`migrate.mjs`)
 - [x] Seed completo com dados de teste (tenant, users, atletas, coaches, sessões, daily logs)
-- [x] Colunas ajustadas: `tinyint → int`, coluna de senha é `password_hash` (bcrypt)
+- [x] Colunas ajustadas: `tinyint → int`, coluna de senha é `password_hash` (bcrypt 10 rounds)
 
 ### Autenticação
 - [x] NextAuth conectado ao MySQL via Drizzle ORM
 - [x] JWT com `role`, `tenant_id`, `unit_id`, `avatar`
 - [x] `VALID_ROLES` exportado — validação no token e sanity check no callback JWT
-- [x] Suporte a Google OAuth e Facebook OAuth (`pending_onboarding`)
+- [x] Suporte a Google OAuth e Facebook OAuth — usuário cai em `pending_onboarding` se não tiver cadastro completo
 - [x] Páginas customizadas: `/login`, `/register`, `/forgot-password`
 
 ### Middleware RBAC
@@ -75,7 +76,7 @@
 - [x] `academy_coach` — Cadastro, Sessões, Prescrição, Monitoramento, Diversos
 - [x] `receptionist` — Cadastro, Sessões, Financeiro, Diversos
 - [x] `academy_athlete` — Treino, Histórico, Diversos
-- [x] `coach_athlete` — Treino, Histórico, Diversos *(adicionado 05/03/2026)*
+- [x] `coach_athlete` — Treino, Histórico, Diversos
 - [x] `athlete` — Treino, Histórico, Diversos
 
 ### UserDropdown (UserDropdown.jsx)
@@ -90,97 +91,75 @@
 
 ## ✅ FASE 3 — Módulo Atletas (Concluída)
 
-### API `/api/athletes`
-- [x] `GET /api/athletes` — listagem paginada, busca, filtro de status, isolamento por tenant
-  - `super_admin` → vê todos os 3 tipos de atleta
-  - `coach` → apenas `coach_athlete` do seu tenant
-  - demais staff → apenas `academy_athlete` do seu tenant
-- [x] `POST /api/athletes` — cria atleta com role automático por quem cadastra
-  - `tenant_admin` / `academy_coach` → cria `academy_athlete`
-  - `coach` → cria `coach_athlete` com `coach_id` vinculado
-  - `super_admin` → usa `targetRole` do body
-  - Senha padrão: `nodus@123` (bcrypt 10 rounds) quando não informada
-  - Zonas de FC calculadas automaticamente a partir de `hr_max`
-
-### API `/api/athletes/[id]`
+### API
+- [x] `GET /api/athletes` — listagem paginada, busca, filtro de status, isolamento por tenant/role
+- [x] `POST /api/athletes` — cria atleta com role automático baseado em quem cadastra
+  - Senha padrão: `nodus@123` — zonas de FC calculadas automaticamente
 - [x] `GET /api/athletes/[id]` — perfil completo (user + profile + sensor + logs + ACWR + sessões)
-  - Aceita os 3 roles de atleta: `athlete`, `academy_athlete`, `coach_athlete`
-  - Controle de acesso: `coach` só acessa `coach_athlete`; staff acessa pelo `tenant_id`
+  - Aceita os 3 roles: `athlete`, `academy_athlete`, `coach_athlete`
 - [x] `PUT /api/athletes/[id]` — atualiza user + profile, recalcula zonas de FC
 - [x] `DELETE /api/athletes/[id]` — soft delete (is_active=0, status=inactive)
 
-### Componentes de Atletas
-- [x] `AthleteStatsBar` — cards rápidos (total, ativos, inativos)
-- [x] `AthleteFilters` — busca + filtro de status
-- [x] `AthleteTable` — tabela com avatar, FC máx, sensor, status, matrícula, ações
-  - Prop `detailBasePath` dinâmica — cada role passa seu prefixo de rota
-  - Prop `canManage` para controle de ações de inativação
-- [x] `AthleteAddModal` — modal 2 passos (dados pessoais + ficha esportiva)
-- [x] `AthleteDetailView` — perfil completo com tabs (Visão Geral / Sessões / Daily Logs)
-  - Suporta prop `backPath` para breadcrumb dinâmico
-  - Suporta prop `athleteId` direto (sem precisar do `params` do Next.js)
-  - Hero card com banner, avatar, stats rápidas
-  - Zonas de FC com cálculo automático
-  - Card ACWR com interpretação (Zona Ideal / Insuficiente / Risco)
-  - Card Sensor ANT+
+### Componentes
+- [x] `AthleteStatsBar`, `AthleteFilters`, `AthleteTable` (prop `detailBasePath` + `canManage`)
+- [x] `AthleteAddModal` — 2 passos: dados pessoais + ficha esportiva
+- [x] `AthleteDetailView` — hero card, zonas FC, ACWR, sensor ANT+, sessões, daily logs
+  - Props: `athleteId`, `backPath`, `backLabel`
 
-### Telas de Atletas
-- [x] `/athletes` — listagem para tenant_admin, academy_coach, receptionist
-- [x] `/athletes/[id]` — perfil para staff da academia
-- [x] `/coach/athletes` — listagem exclusiva do coach independente
-- [x] `/coach/athletes/[id]` — perfil com breadcrumb "Meus Alunos" *(adicionado 05/03/2026)*
+### Telas
+- [x] `/athletes` e `/athletes/[id]` — para staff da academia
+- [x] `/coach/athletes` e `/coach/athletes/[id]` — exclusivas do coach independente
 
 ---
 
 ## ✅ FASE 4 — Módulo Coaches (Concluída)
 
-- [x] `GET /api/coaches` — listagem paginada com isolamento por tenant
-- [x] `POST /api/coaches` — criar coach
-- [x] `PUT /api/coaches/[id]` — editar coach
-- [x] `DELETE /api/coaches/[id]` — remover coach
-- [x] Tela `/coaches` — tabela com busca, filtros, paginação, modal de cadastro
-- [x] `CoachStatsBar`, `CoachFilters`, `CoachTable`, `CoachAddModal`
-- [ ] Tela `/coaches/[id]` — perfil detalhado do coach *(próximo passo sugerido)*
-
----
-
-## 🔧 Bugs Corrigidos (05/03/2026)
-
-### RBAC / Auth
-- [x] `coach_athlete` não estava em `VALID_ROLES` no `auth.js` — usuários entravam como `pending_onboarding`
-- [x] Colisão de prefixo no middleware: `/coach` capturava `/coach_athlete` antes — causava `ERR_TOO_MANY_REDIRECTS`
-  - Resolvido: `ROUTE_PERMISSIONS` convertido para array com ordenação por comprimento
-- [x] `VerticalMenu.jsx` não tinha bloco para `coach_athlete` — menu lateral aparecia vazio
-
 ### API
-- [x] `GET /api/athletes` usava `eq(users.role, 'athlete')` fixo — não retornava `coach_athlete` nem `academy_athlete`
-- [x] `GET/PUT/DELETE /api/athletes/[id]` — mesmo problema — 404 para qualquer atleta não-independente
-  - Resolvido: helper `isAthleteRole()` com `OR` dinâmico para os 3 roles
-
-### Banco de Dados
-- [x] Coluna de senha é `password_hash`, não `password` — query `SELECT password` retornava erro 1054
-- [x] `atleta@nodus.app` (Ana Paula) estava com `role=academy_athlete` e `tenant_id` da Fitlife — corrigido para `role=athlete, tenant_id=NULL`
+- [x] `GET /api/coaches` — listagem paginada com isolamento por tenant
+- [x] `POST /api/coaches` — criar coach com perfil profissional
+- [x] `GET /api/coaches/[id]` — perfil completo (user + coach_profile + stats + sessões)
+- [x] `PUT /api/coaches/[id]` — atualiza user + coach_profile (upsert)
+- [x] `DELETE /api/coaches/[id]` — soft delete
 
 ### Componentes
-- [x] `AthleteDetailView` — breadcrumb e botão Voltar hardcoded em `/athletes` — ignorava `backPath`
-- [x] `/coach/athletes/[id]/page.jsx` — `params.id` acessado síncronamente (Next.js 15 exige `await params`)
+- [x] `CoachStatsBar`, `CoachFilters`, `CoachTable`, `CoachAddModal`
+- [x] `CoachDetailView` — hero card, dados pessoais, dados profissionais (CREF, especialidades, bio)
+  - Stats: sessões ministradas, atletas atendidos
+  - Tab Sessões ministradas com tabela completa
+  - Modo edição inline com save via PUT
+  - Props: `coachId`, `backPath`, `backLabel`
+
+### Telas
+- [x] `/coaches` — listagem para tenant_admin e super_admin
+- [x] `/coaches/[id]` — perfil detalhado do coach
 
 ---
 
-## 🔲 FASE 5 — Dashboards por Role
+## ✅ FASE 4.1 — Infraestrutura de Qualidade (Concluída)
 
-- [ ] `/home` super_admin — métricas SaaS (tenants, MRR, alertas)
-- [ ] `/home` tenant_admin — atletas ativos, sessões do dia, receita do mês
-- [ ] `/home` coach — alunos do dia, próximas sessões, alertas de FC
-- [ ] `/home` academy_coach — igual ao coach (sem financeiro)
-- [ ] `/home` receptionist — check-ins do dia, atletas presentes
-- [ ] `/home` academy_athlete / coach_athlete / athlete — próximo treino, FC última sessão, evolução
+- [x] `CHANGELOG.md` criado com histórico completo da v0.1.0
+- [x] `.release-it.json` configurado com `@release-it/conventional-changelog`
+  - Commits `feat:`, `fix:`, `docs:`, `refactor:`, `perf:` geram entradas automáticas
+  - Um único arquivo `CHANGELOG.md` acumulativo (novas versões adicionadas no topo)
+  - Comando para gerar nova versão: `npx release-it minor` (ou `patch` / `major`)
+- [x] `DEVELOPMENT_PLAN.md` atualizado com convenções, tabela de rotas e padrões de componente
+
+---
+
+## 🔲 FASE 5 — Dashboards por Role *(próximo passo)*
+
+- [ ] `/home` `super_admin` — métricas SaaS (tenants ativos, MRR, alertas)
+- [ ] `/home` `tenant_admin` — atletas ativos, sessões do dia, receita do mês
+- [ ] `/home` `coach` — alunos do dia, próximas sessões, alertas de FC
+- [ ] `/home` `academy_coach` — igual ao coach (sem financeiro)
+- [ ] `/home` `receptionist` — check-ins do dia, atletas presentes
+- [ ] `/home` `academy_athlete` / `coach_athlete` / `athlete` — próximo treino, FC última sessão, evolução
 
 ---
 
 ## 🔲 FASE 6 — Módulo Sessões de Treino
 
-- [ ] Schema: tabela `training_sessions` já existe — validar campos
+- [ ] Validar campos da tabela `training_sessions` existente
 - [ ] `GET/POST /api/sessions` — listagem e criação
 - [ ] `PUT/DELETE /api/sessions/[id]`
 - [ ] Tela `/sessions` — agenda com calendário e lista
@@ -196,7 +175,7 @@
 - [ ] Tela `/monitoring` — exibição em tempo real por atleta
 - [ ] Zonas de FC com alertas visuais
 - [ ] Tela TV (`/academy/tvscreen`) — exibição para academia
-- [ ] Persistência dos dados de FC no banco (`heart_rate` table)
+- [ ] Persistência dos dados de FC no banco (tabela `heart_rate`)
 
 ---
 
@@ -206,7 +185,7 @@
 - [ ] Prescrição por atleta (séries, cargas, zonas de FC alvo)
 - [ ] Vinculação de prescrição com sessão
 - [ ] Pré-treino e Pós-treino (academy_athlete / coach_athlete / athlete)
-- [ ] ACWR — cálculo automático (tabela já existe no schema)
+- [ ] ACWR — cálculo automático (tabela `weekly_indices` já existe)
 
 ---
 
@@ -221,7 +200,44 @@
 
 ---
 
-## 🔲 FASE 10 — Módulo Gamificação
+## 🔲 FASE 10 — PWA + Notificações Push
+
+> Funciona em notebook (Chrome/Edge/Firefox) e celular (Android nativo, iOS Safari 16.4+)
+
+### Banco de Dados (migration necessária)
+- [ ] Tabela `push_subscriptions`
+  - Colunas: `id`, `user_id` (FK), `endpoint`, `p256dh`, `auth`, `device_info`, `created_at`
+
+### Implementação
+- [ ] Gerar par de chaves VAPID: `npx web-push generate-vapid-keys`
+- [ ] Configurar `next-pwa` para registro automático do Service Worker
+- [ ] `POST /api/push/subscribe` — salva subscription do dispositivo
+- [ ] `POST /api/push/send` — dispara notificação via lib `web-push`
+- [ ] Casos de uso: alerta de FC alta durante sessão, notificar check-in, lembrete de treino agendado
+
+---
+
+## 🔲 FASE 11 — OAuth Social (Google + Facebook)
+
+> Providers já configurados no NextAuth — faltam apenas as credenciais e a tela de onboarding
+
+### Pré-requisitos
+- [ ] Criar app no [Google Cloud Console](https://console.cloud.google.com) — ativar OAuth 2.0
+- [ ] Criar app no [Meta for Developers](https://developers.facebook.com) — ativar Facebook Login
+- [ ] Adicionar Redirect URIs de produção em ambos
+- [ ] Preencher variáveis no `.env`: `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `FACEBOOK_CLIENT_ID`, `FACEBOOK_CLIENT_SECRET`
+
+### Implementação
+- [ ] Tela `/onboarding` — para usuários OAuth com `role=pending_onboarding`
+  - Escolha do tipo de conta (coach, athlete, academy...)
+  - Preenchimento de dados complementares (telefone, documento)
+  - Upgrade de role no banco e redirect para `/home`
+- [ ] Testar fluxo completo Google → onboarding → dashboard
+- [ ] Testar fluxo completo Facebook → onboarding → dashboard
+
+---
+
+## 🔲 FASE 12 — Gamificação
 
 - [ ] Sistema de badges e conquistas
 - [ ] Ranking por academia
@@ -230,16 +246,16 @@
 
 ---
 
-## 🔲 FASE 11 — Módulo Permissões Dinâmicas
+## 🔲 FASE 13 — Módulo Permissões Dinâmicas
 
-- [ ] Schema de permissões por usuário no banco
-- [ ] Painel de permissões para tenant_admin
+- [ ] Schema de permissões granulares por usuário no banco
+- [ ] Painel de permissões para `tenant_admin`
 - [ ] Menu lateral filtrando itens por permissão da sessão
 - [ ] API protegida por permissões granulares
 
 ---
 
-## 🔲 FASE 12 — Relatórios e Evolução
+## 🔲 FASE 14 — Relatórios e Evolução
 
 - [ ] Evolução do atleta (FC histórica, cargas, ACWR)
 - [ ] Relatórios por academia (frequência, desempenho)
@@ -248,22 +264,21 @@
 
 ---
 
-## 🔲 FASE 13 — Páginas Próprias por Role
+## 🔲 FASE 15 — Páginas Próprias por Role
 
 > Substituir os redirects temporários por páginas reais filtradas por tenant
 
-- [x] `/coach/athletes` — lista de atletas do coach independente *(concluído)*
-- [x] `/coach/athletes/[id]` — perfil com breadcrumb correto *(concluído)*
-- [ ] `/coaches/[id]` — perfil detalhado do coach *(próximo)*
+- [x] `/coach/athletes` e `/coach/athletes/[id]` *(concluído na Fase 3)*
+- [x] `/coaches/[id]` *(concluído na Fase 4)*
 - [ ] `/academy/coaches` — lista de coaches da academia
 - [ ] `/academy/athletes` — lista de alunos da academia
 - [ ] `/academy/recepcionist` — gestão de recepcionistas
-- [ ] `/academy_coach/athletes` — atletas do treinador
+- [ ] `/academy_coach/athletes` — atletas do treinador da academia
 - [ ] Demais páginas role-específicas
 
 ---
 
-## 🔲 FASE 14 — Produção
+## 🔲 FASE 16 — Produção
 
 - [ ] Definir provedor de deploy (Vercel, Railway, VPS)
 - [ ] Variáveis de ambiente de produção
@@ -278,27 +293,40 @@
 
 ### Senhas
 - Senha padrão para novos cadastros: `nodus@123`
-- Seed de teste usa `atleta123` para academy_athletes do seed
+- Seed de teste usa `atleta123` para academy_athletes
 - Coluna no banco: `password_hash` (bcrypt 10 rounds — NUNCA `password`)
+
+### Padrão de Commits (Conventional Commits)
+
+| Prefixo | Uso | Aparece no Changelog |
+|---|---|---|
+| `feat:` | Nova funcionalidade | Sim |
+| `fix:` | Correção de bug | Sim |
+| `docs:` | Documentação | Sim |
+| `refactor:` | Refatoração sem mudar comportamento | Sim |
+| `perf:` | Melhoria de performance | Sim |
+| `test:` | Testes | Sim |
+| `chore:` | Manutenção (configs, deps) | Oculto |
+| `style:` | Estilo visual sem lógica | Oculto |
 
 ### Rotas por Role
 
-| Role | Prefixo de rota | Rota de atletas |
-|---|---|---|
-| `super_admin` | `/admin` | `/athletes` (todos) |
-| `tenant_admin` | `/academy` | `/athletes` |
-| `coach` | `/coach` | `/coach/athletes` |
-| `academy_coach` | `/academy_coach` | `/academy_coach/athletes` |
-| `receptionist` | `/recepcionist` | `/recepcionist/athletes` |
-| `academy_athlete` | `/academy_athlete` | — |
-| `coach_athlete` | `/coach_athlete` | — |
-| `athlete` | `/athlete` | — |
+| Role | Prefixo | Rota de atletas | Rota de coaches |
+|---|---|---|---|
+| `super_admin` | `/admin` | `/athletes` | `/coaches` |
+| `tenant_admin` | `/academy` | `/athletes` | `/coaches` |
+| `coach` | `/coach` | `/coach/athletes` | — |
+| `academy_coach` | `/academy_coach` | `/academy_coach/athletes` | — |
+| `receptionist` | `/recepcionist` | `/recepcionist/athletes` | — |
+| `academy_athlete` | `/academy_athlete` | — | — |
+| `coach_athlete` | `/coach_athlete` | — | — |
+| `athlete` | `/athlete` | — | — |
 
 ### Padrões de Componente
-- Toda page route do Next.js 15 que acessa `params` deve ser `async` e usar `await params`
-- Client Components com `params` devem usar `use(params)` do React
-- `AthleteDetailView` aceita `athleteId` (direct) ou `params` (page route) + `backPath`
-- `AthleteTable` aceita `detailBasePath` para definir a rota do botão "ver perfil"
+- Page routes Next.js 15 com `params`: sempre `async function` + `await params`
+- Client Components com `params`: usar `use(params)` do React
+- Views de detalhe aceitam props diretas: `athleteId`/`coachId` + `backPath` + `backLabel`
+- Tables aceitam `detailBasePath` para montar a rota do botão "ver perfil" dinamicamente
 
 ---
 
