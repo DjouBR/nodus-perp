@@ -3,6 +3,24 @@
 Todas as mudancas relevantes do projeto sao documentadas aqui.
 
 
+## [0.3.0](https://github.com/DjouBR/nodus-perp/compare/v0.2.0...v0.3.0) (2026-03-08)
+
+### Novas Funcionalidades
+
+* add /admin/clients - full client management for super_admin (API + view + page) ([434368a](https://github.com/DjouBR/nodus-perp/commit/434368a818c4172a13e13eec6be0b51a4d9f4b43))
+
+### Correcoes de Bugs
+
+* 4 bugs — remove senha do modal coach, corrige PUT 500 coach/client, adiciona botão editar na tabela de atletas ([54bf3c9](https://github.com/DjouBR/nodus-perp/commit/54bf3c95f025a25b4c28e7fa4d7e549672063548))
+* correct authOptions import path @/libs/auth in admin/clients routes ([22d73df](https://github.com/DjouBR/nodus-perp/commit/22d73df42a6280b23f7b8fa2d34d4039526cc2bd))
+* normaliza birthdate (yyyy-MM-dd) no Coach e Athlete DetailView; botão editar visível para tenant_admin no CoachDetailView ([8e350c3](https://github.com/DjouBR/nodus-perp/commit/8e350c31417397b65bf174c0d13f9180ceea025c))
+* normaliza birthdate para yyyy-MM-dd no ClientDetailView (evita erro 500 no PUT) ([10ea0b9](https://github.com/DjouBR/nodus-perp/commit/10ea0b98675bb083ea58052e628f0a09af6cd261))
+
+### Documentacao
+
+* cria DEPLOYMENT_PLAN.md com histórico e roadmap de CRUDs ([2b7ee73](https://github.com/DjouBR/nodus-perp/commit/2b7ee73f896c532fe515a77ba8349726623b4f82))
+* update DEVELOPMENT_PLAN.md - fase 4 concluida, PWA/Push/OAuth roadmap, changelog config ([4cbea23](https://github.com/DjouBR/nodus-perp/commit/4cbea232987e6da6d48beeb72fd486793ca6d415))
+
 ## 0.2.0 (2026-03-06)
 
 ### Novas Funcionalidades
