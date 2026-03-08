@@ -2,6 +2,7 @@
 
 import { useState, useEffect, use } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
+import { useSession } from 'next-auth/react'
 
 // ── Helpers ──────────────────────────────────────────────────────────────────────
 const fmt     = (val, unit = '') => val ? `${val}${unit}` : '—'
@@ -80,11 +81,21 @@ function ZoneBadge({ minBpm, maxBpm, idx }) {
   )
 }
 
-export default function AthleteDetailView({ params, athleteId: propAthleteId, backPath = '/athletes', canEdit = false }) {
-  const resolvedParams = params ? use(params) : null
-  const athleteId     = propAthleteId ?? resolvedParams?.id
-  const router        = useRouter()
-  const searchParams  = useSearchParams()
+/**
+ * Props:
+ *   athleteId      {string}   UUID do atleta (ou via params.id)
+ *   backPath       {string}   Rota do botão Voltar (default: '/athletes')
+ *   canEdit        {boolean}  Sobrescreve a verificação de role (default: undefined → usa session)
+ */
+export default function AthleteDetailView({ params, athleteId: propAthleteId, backPath = '/athletes', canEdit: canEditProp }) {
+  const resolvedParams  = params ? use(params) : null
+  const athleteId       = propAthleteId ?? resolvedParams?.id
+  const router          = useRouter()
+  const searchParams    = useSearchParams()
+  const { data: session } = useSession()
+
+  // canEdit: prop explícita > role da sessão
+  const canEdit = canEditProp ?? ['super_admin', 'tenant_admin', 'coach', 'academy_coach'].includes(session?.user?.role)
 
   const [data, setData]         = useState(null)
   const [loading, setLoading]   = useState(true)
@@ -94,8 +105,8 @@ export default function AthleteDetailView({ params, athleteId: propAthleteId, ba
   const [editForm, setEditForm] = useState({})
 
   useEffect(() => {
-    if (searchParams.get('edit') === '1') setEditMode(true)
-  }, [searchParams])
+    if (searchParams.get('edit') === '1' && canEdit) setEditMode(true)
+  }, [searchParams, canEdit])
 
   const loadData = () => {
     if (!athleteId) return
@@ -108,7 +119,7 @@ export default function AthleteDetailView({ params, athleteId: propAthleteId, ba
           name:      d.name               ?? '',
           email:     d.email              ?? '',
           phone:     d.phone              ?? '',
-          birthdate: toDateInput(d.birthdate),   // normaliza para yyyy-MM-dd
+          birthdate: toDateInput(d.birthdate),
           document:  d.document           ?? '',
           gender:    d.gender             ?? '',
           is_active: d.is_active          ?? 1,
@@ -204,13 +215,15 @@ export default function AthleteDetailView({ params, athleteId: propAthleteId, ba
                   <i className='tabler-bluetooth text-sm' />Sensor #{sensor.serial}
                 </span>
               )}
-              <button
-                onClick={() => setEditMode(v => !v)}
-                className='ml-2 flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-xs font-medium hover:bg-action-hover'
-              >
-                <i className={`text-sm ${editMode ? 'tabler-x' : 'tabler-edit'}`} />
-                {editMode ? 'Cancelar' : 'Editar'}
-              </button>
+              {canEdit && (
+                <button
+                  onClick={() => setEditMode(v => !v)}
+                  className='ml-2 flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-xs font-medium hover:bg-action-hover'
+                >
+                  <i className={`text-sm ${editMode ? 'tabler-x' : 'tabler-edit'}`} />
+                  {editMode ? 'Cancelar' : 'Editar'}
+                </button>
+              )}
             </div>
           </div>
 
@@ -348,7 +361,7 @@ export default function AthleteDetailView({ params, athleteId: propAthleteId, ba
       )}
 
       {/* Tab: Visão Geral (edição) */}
-      {tab === 'overview' && editMode && (
+      {tab === 'overview' && editMode && canEdit && (
         <Card title='Editar Atleta' icon='tabler-edit'>
           <div className='grid grid-cols-1 gap-4 sm:grid-cols-2'>
             {[['Nome completo','name','text'],['Email','email','email'],['Telefone','phone','text'],['Documento (CPF)','document','text']].map(([lbl, key, type]) => (

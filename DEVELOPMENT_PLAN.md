@@ -104,7 +104,7 @@
 - [x] `AthleteStatsBar`, `AthleteFilters`, `AthleteTable` (prop `detailBasePath` + `canManage`)
 - [x] `AthleteAddModal` — 2 passos: dados pessoais + ficha esportiva
 - [x] `AthleteDetailView` — hero card, zonas FC, ACWR, sensor ANT+, sessões, daily logs
-  - Props: `athleteId`, `backPath`, `backLabel`
+  - Props: `athleteId`, `backPath`, `canEdit` (usa session se omitido)
 
 ### Telas
 - [x] `/athletes` e `/athletes/[id]` — para staff da academia
@@ -124,10 +124,7 @@
 ### Componentes
 - [x] `CoachStatsBar`, `CoachFilters`, `CoachTable`, `CoachAddModal`
 - [x] `CoachDetailView` — hero card, dados pessoais, dados profissionais (CREF, especialidades, bio)
-  - Stats: sessões ministradas, atletas atendidos
-  - Tab Sessões ministradas com tabela completa
-  - Modo edição inline com save via PUT
-  - Props: `coachId`, `backPath`, `backLabel`
+  - Botão Editar visível apenas para `super_admin` e `tenant_admin`
 
 ### Telas
 - [x] `/coaches` — listagem para tenant_admin e super_admin
@@ -139,10 +136,28 @@
 
 - [x] `CHANGELOG.md` criado com histórico completo da v0.1.0
 - [x] `.release-it.json` configurado com `@release-it/conventional-changelog`
-  - Commits `feat:`, `fix:`, `docs:`, `refactor:`, `perf:` geram entradas automáticas
-  - Um único arquivo `CHANGELOG.md` acumulativo (novas versões adicionadas no topo)
-  - Comando para gerar nova versão: `npx release-it minor` (ou `patch` / `major`)
-- [x] `DEVELOPMENT_PLAN.md` atualizado com convenções, tabela de rotas e padrões de componente
+- [x] `DEVELOPMENT_PLAN.md` — este arquivo
+- [x] `DEPLOYMENT_PLAN.md` — criado com histórico de fixes e roadmap de CRUDs
+
+---
+
+## ✅ FASE 4.2 — Hotfixes de CRUD (Concluída — 06-08/03/2026)
+
+### Bugs corrigidos
+- [x] `birthdate` ISO → `yyyy-MM-dd` no `ClientDetailView` (SuperAdmin)
+- [x] `birthdate` ISO → `yyyy-MM-dd` no `CoachDetailView`
+- [x] `birthdate` ISO → `yyyy-MM-dd` no `AthleteDetailView`
+- [x] Botão Editar Coach visível para qualquer role → agora só `super_admin` e `tenant_admin`
+- [x] Botão Editar Atleta com `(canEdit || true)` hardcoded → corrigido para usar `useSession`
+  - Roles que podem editar atletas: `super_admin`, `tenant_admin`, `coach`, `academy_coach`
+
+### Melhorias nas datatables
+- [x] `ClientTable` — adicionado botão **Excluir** (`tabler-trash`) com `confirm()` + `DELETE /api/admin/clients/:id`
+  - Separado de Inativar: inativar = `PUT is_active=0`; excluir = `DELETE`
+  - Ícone de Inativar mudado para `text-warning` (antes era `text-error`)
+- [x] `AthleteTable` — adicionado botão **Excluir** (`tabler-trash`) com `confirm()` + `DELETE /api/athletes/:id`
+  - Inativar usa `PUT is_active=0` (não chama DELETE); excluir chama `DELETE`
+- [x] `CoachTable` — já possuía DELETE desde a Fase 4 ✅
 
 ---
 
@@ -154,6 +169,17 @@
 - [ ] `/home` `academy_coach` — igual ao coach (sem financeiro)
 - [ ] `/home` `receptionist` — check-ins do dia, atletas presentes
 - [ ] `/home` `academy_athlete` / `coach_athlete` / `athlete` — próximo treino, FC última sessão, evolução
+
+---
+
+## 🔲 FASE 5.1 — Upload de Avatar (pendente)
+
+> O campo `avatar_url varchar(255)` já existe no schema `users`.
+
+- [ ] API `POST /api/upload/avatar` — recebe `multipart/form-data`, salva em `/public/uploads/avatars/`
+- [ ] Componente `AvatarUpload` — clique no avatar abre seletor de arquivo, preview + botão salvar
+- [ ] Integrar em `ClientDetailView`, `CoachDetailView`, `AthleteDetailView`
+- [ ] Dependência necessária: `formidable` ou `busboy` para parse do multipart
 
 ---
 
@@ -184,7 +210,7 @@
 - [ ] Tela `/planning` — planejamento periodizado
 - [ ] Prescrição por atleta (séries, cargas, zonas de FC alvo)
 - [ ] Vinculação de prescrição com sessão
-- [ ] Pré-treino e Pós-treino (academy_athlete / coach_athlete / athlete)
+- [ ] Pré-treino e Pós-treino
 - [ ] ACWR — cálculo automático (tabela `weekly_indices` já existe)
 
 ---
@@ -229,9 +255,6 @@
 
 ### Implementação
 - [ ] Tela `/onboarding` — para usuários OAuth com `role=pending_onboarding`
-  - Escolha do tipo de conta (coach, athlete, academy...)
-  - Preenchimento de dados complementares (telefone, documento)
-  - Upgrade de role no banco e redirect para `/home`
 - [ ] Testar fluxo completo Google → onboarding → dashboard
 - [ ] Testar fluxo completo Facebook → onboarding → dashboard
 
@@ -296,6 +319,19 @@
 - Seed de teste usa `atleta123` para academy_athletes
 - Coluna no banco: `password_hash` (bcrypt 10 rounds — NUNCA `password`)
 
+### Datas
+- MySQL retorna `date` como ISO string (`2000-01-01T00:00:00.000Z`)
+- **Sempre** normalizar com `toDateInput(d)` antes de popular `<input type="date">`:
+  ```js
+  const toDateInput = d => {
+    if (!d) return ''
+    if (/^\d{4}-\d{2}-\d{2}$/.test(d)) return d
+    const parsed = new Date(d)
+    if (isNaN(parsed.getTime())) return ''
+    return parsed.toISOString().slice(0, 10)
+  }
+  ```
+
 ### Padrão de Commits (Conventional Commits)
 
 | Prefixo | Uso | Aparece no Changelog |
@@ -325,9 +361,11 @@
 ### Padrões de Componente
 - Page routes Next.js 15 com `params`: sempre `async function` + `await params`
 - Client Components com `params`: usar `use(params)` do React
-- Views de detalhe aceitam props diretas: `athleteId`/`coachId` + `backPath` + `backLabel`
+- Views de detalhe aceitam props diretas: `athleteId`/`coachId` + `backPath` + `canEdit`
 - Tables aceitam `detailBasePath` para montar a rota do botão "ver perfil" dinamicamente
+- DELETE em usuários = soft delete via API (`is_active=0`); excluir da tabela = chamar `DELETE` HTTP
+- Permissões: checar sempre `session.user.role` via `useSession()` — nunca hardcodar `true`
 
 ---
 
-*Última atualização: 05/03/2026*
+*Última atualização: 08/03/2026*

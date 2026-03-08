@@ -4,9 +4,9 @@ import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 
 const ROLE_CONFIG = {
-  tenant_admin: { label: 'Academia / Franquia',       color: 'bg-info/10 text-info',      icon: 'tabler-building-community' },
-  coach:        { label: 'Treinador Independente',    color: 'bg-warning/10 text-warning', icon: 'tabler-user-star'           },
-  athlete:      { label: 'Atleta Independente',       color: 'bg-success/10 text-success', icon: 'tabler-user'                },
+  tenant_admin: { label: 'Academia / Franquia',    color: 'bg-info/10 text-info',      icon: 'tabler-building-community' },
+  coach:        { label: 'Treinador Independente', color: 'bg-warning/10 text-warning', icon: 'tabler-user-star'           },
+  athlete:      { label: 'Atleta Independente',    color: 'bg-success/10 text-success', icon: 'tabler-user'                },
 }
 
 const AVATAR_COLORS = ['#7367F0','#28C76F','#FF9F43','#00CFE8','#EA5455']
@@ -16,18 +16,32 @@ const fmtDate = d => d ? new Date(d).toLocaleDateString('pt-BR') : '—'
 
 export default function ClientTable({ clients, loading, page, totalPages, onPageChange, onRefresh }) {
   const router = useRouter()
-  const [deletingId, setDeletingId] = useState(null)
+  const [pendingId, setPendingId] = useState(null)
 
   const handleToggle = async (client) => {
     if (!confirm(`${client.is_active ? 'Inativar' : 'Reativar'} "${client.name}"?`)) return
-    setDeletingId(client.id)
+    setPendingId(client.id)
     await fetch(`/api/admin/clients/${client.id}`, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ is_active: client.is_active ? 0 : 1 }),
     })
-    setDeletingId(null)
+    setPendingId(null)
     onRefresh()
+  }
+
+  const handleDelete = async (client) => {
+    if (!confirm(`Excluir permanentemente "${client.name}"?\n\nEsta ação não pode ser desfeita.`)) return
+    setPendingId(client.id)
+    try {
+      const res = await fetch(`/api/admin/clients/${client.id}`, { method: 'DELETE' })
+      if (!res.ok) throw new Error('Falha ao excluir')
+      onRefresh()
+    } catch (err) {
+      alert(err.message)
+    } finally {
+      setPendingId(null)
+    }
   }
 
   if (loading) return (
@@ -67,6 +81,7 @@ export default function ClientTable({ clients, loading, page, totalPages, onPage
           <tbody>
             {clients.map(c => {
               const rc = ROLE_CONFIG[c.role] ?? { label: c.role, color: 'bg-secondary/10 text-secondary', icon: 'tabler-user' }
+              const isBusy = pendingId === c.id
               return (
                 <tr key={c.id}
                   className='border-b last:border-0 transition-colors hover:bg-action-hover'
@@ -134,6 +149,7 @@ export default function ClientTable({ clients, loading, page, totalPages, onPage
                   {/* Ações */}
                   <td className='px-4 py-3'>
                     <div className='flex items-center justify-end gap-1'>
+                      {/* Ver perfil */}
                       <button
                         onClick={() => router.push(`/admin/clients/${c.id}`)}
                         className='rounded p-1.5 hover:bg-primary/10 text-primary'
@@ -141,6 +157,8 @@ export default function ClientTable({ clients, loading, page, totalPages, onPage
                       >
                         <i className='tabler-eye text-base' />
                       </button>
+
+                      {/* Editar */}
                       <button
                         onClick={() => router.push(`/admin/clients/${c.id}`)}
                         className='rounded p-1.5 text-info hover:bg-info/10'
@@ -148,21 +166,30 @@ export default function ClientTable({ clients, loading, page, totalPages, onPage
                       >
                         <i className='tabler-edit text-base' />
                       </button>
+
+                      {/* Inativar / Reativar */}
                       <button
                         onClick={() => handleToggle(c)}
-                        disabled={deletingId === c.id}
+                        disabled={isBusy}
                         className={`rounded p-1.5 disabled:opacity-50 ${
-                          c.is_active
-                            ? 'text-error hover:bg-error/10'
-                            : 'text-success hover:bg-success/10'
+                          c.is_active ? 'text-warning hover:bg-warning/10' : 'text-success hover:bg-success/10'
                         }`}
                         title={c.is_active ? 'Inativar' : 'Reativar'}
                       >
                         <i className={`text-base ${
-                          deletingId === c.id
-                            ? 'tabler-loader-2 animate-spin'
-                            : c.is_active ? 'tabler-user-off' : 'tabler-user-check'
+                          isBusy ? 'tabler-loader-2 animate-spin'
+                          : c.is_active ? 'tabler-user-off' : 'tabler-user-check'
                         }`} />
+                      </button>
+
+                      {/* Excluir */}
+                      <button
+                        onClick={() => handleDelete(c)}
+                        disabled={isBusy}
+                        className='rounded p-1.5 text-error hover:bg-error/10 disabled:opacity-50'
+                        title='Excluir'
+                      >
+                        <i className={`text-base ${isBusy ? 'tabler-loader-2 animate-spin' : 'tabler-trash'}`} />
                       </button>
                     </div>
                   </td>

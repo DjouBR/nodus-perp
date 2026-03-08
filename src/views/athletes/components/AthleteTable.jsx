@@ -1,13 +1,14 @@
 'use client'
 
+import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 
 const GENDER_LABEL = { M: 'Masc.', F: 'Fem.', other: 'Outro' }
 
 const STATUS_STYLE = {
-  active:    { label: 'Ativo',     cls: 'bg-success/15 text-success' },
-  inactive:  { label: 'Inativo',   cls: 'bg-warning/15 text-warning' },
-  suspended: { label: 'Suspenso',  cls: 'bg-error/15 text-error'     },
+  active:    { label: 'Ativo',    cls: 'bg-success/15 text-success' },
+  inactive:  { label: 'Inativo',  cls: 'bg-warning/15 text-warning' },
+  suspended: { label: 'Suspenso', cls: 'bg-error/15 text-error'     },
 }
 
 function Avatar({ name, avatar_url }) {
@@ -27,11 +28,35 @@ export default function AthleteTable({
   detailBasePath = '/athletes'
 }) {
   const router = useRouter()
+  const [pendingId, setPendingId] = useState(null)
 
   const handleInactivate = async (id, name) => {
     if (!confirm(`Inativar atleta "${name}"?`)) return
-    await fetch(`/api/athletes/${id}`, { method: 'DELETE' })
-    onRefresh()
+    setPendingId(id)
+    try {
+      await fetch(`/api/athletes/${id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ is_active: 0 }),
+      })
+      onRefresh()
+    } finally {
+      setPendingId(null)
+    }
+  }
+
+  const handleDelete = async (id, name) => {
+    if (!confirm(`Excluir permanentemente "${name}"?\n\nEsta ação não pode ser desfeita.`)) return
+    setPendingId(id)
+    try {
+      const res = await fetch(`/api/athletes/${id}`, { method: 'DELETE' })
+      if (!res.ok) throw new Error('Falha ao excluir')
+      onRefresh()
+    } catch (err) {
+      alert(err.message)
+    } finally {
+      setPendingId(null)
+    }
   }
 
   if (loading) return (
@@ -70,6 +95,7 @@ export default function AthleteTable({
           <tbody className='divide-y divide-border'>
             {athletes.map(a => {
               const statusInfo = STATUS_STYLE[a.profile?.status] ?? STATUS_STYLE.active
+              const isBusy     = pendingId === a.id
               return (
                 <tr key={a.id} className='hover:bg-actionHover transition-colors'>
                   {/* Atleta */}
@@ -126,7 +152,8 @@ export default function AthleteTable({
 
                   {/* Ações */}
                   <td className='px-5 py-3'>
-                    <div className='flex items-center gap-2'>
+                    <div className='flex items-center gap-1'>
+                      {/* Ver perfil */}
                       <button
                         title='Ver perfil'
                         onClick={() => router.push(`${detailBasePath}/${a.id}`)}
@@ -134,8 +161,10 @@ export default function AthleteTable({
                       >
                         <i className='tabler-eye text-lg' />
                       </button>
+
                       {canManage && (
                         <>
+                          {/* Editar */}
                           <button
                             title='Editar atleta'
                             onClick={() => router.push(`${detailBasePath}/${a.id}?edit=1`)}
@@ -143,12 +172,25 @@ export default function AthleteTable({
                           >
                             <i className='tabler-edit text-lg' />
                           </button>
+
+                          {/* Inativar */}
                           <button
                             title='Inativar'
+                            disabled={isBusy}
                             onClick={() => handleInactivate(a.id, a.name)}
-                            className='rounded-lg p-1.5 text-textSecondary hover:bg-error/10 hover:text-error transition-colors'
+                            className='rounded-lg p-1.5 text-textSecondary hover:bg-warning/10 hover:text-warning transition-colors disabled:opacity-50'
                           >
-                            <i className='tabler-user-off text-lg' />
+                            <i className={`text-lg ${isBusy ? 'tabler-loader-2 animate-spin' : 'tabler-user-off'}`} />
+                          </button>
+
+                          {/* Excluir */}
+                          <button
+                            title='Excluir'
+                            disabled={isBusy}
+                            onClick={() => handleDelete(a.id, a.name)}
+                            className='rounded-lg p-1.5 text-textSecondary hover:bg-error/10 hover:text-error transition-colors disabled:opacity-50'
+                          >
+                            <i className={`text-lg ${isBusy ? 'tabler-loader-2 animate-spin' : 'tabler-trash'}`} />
                           </button>
                         </>
                       )}
