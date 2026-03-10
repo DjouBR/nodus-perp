@@ -7,8 +7,10 @@ import { eq, and, or, like, sql } from 'drizzle-orm'
 import bcrypt from 'bcryptjs'
 import { randomUUID } from 'crypto'
 
-// Roles considerados "atleta" no sistema (todos os 3 tipos)
 const ATHLETE_ROLES = ['academy_athlete', 'coach_athlete', 'athlete']
+
+// Converte string vazia ou undefined para null
+const nullify = v => (v === '' || v === undefined || v === null) ? null : v
 
 // ─────────────────────────────────────────────────────────────────────────────
 // GET /api/athletes
@@ -31,10 +33,6 @@ export async function GET(request) {
 
     const conditions = []
 
-    // Filtro de roles por quem acessa:
-    // - tenant_admin / academy_coach / receptionist → vêem apenas academy_athlete
-    // - coach → vê apenas coach_athlete que ele mesmo cadastrou (via coach_id no profile)
-    // - super_admin → vê todos os tipos de atleta
     if (session.user.role === 'super_admin') {
       conditions.push(
         or(
@@ -46,7 +44,6 @@ export async function GET(request) {
     } else if (session.user.role === 'coach') {
       conditions.push(eq(users.role, 'coach_athlete'))
     } else {
-      // tenant_admin, academy_coach, receptionist
       conditions.push(eq(users.role, 'academy_athlete'))
     }
 
@@ -100,21 +97,37 @@ export async function GET(request) {
 
     const ids = athleteRows.map(a => a.id)
 
-    const profiles   = await db.select().from(athlete_profiles)
+    // Para coach: filtra athlete_profiles pelo coach_id da sessão
+    let profilesQuery = db.select().from(athlete_profiles)
       .where(sql`${athlete_profiles.user_id} IN (${sql.join(ids.map(id => sql`${id}`), sql`, `)})`)
+
+    if (session.user.role === 'coach') {
+      profilesQuery = db.select().from(athlete_profiles)
+        .where(and(
+          sql`${athlete_profiles.user_id} IN (${sql.join(ids.map(id => sql`${id}`), sql`, `)})`,
+          eq(athlete_profiles.coach_id, session.user.id)
+        ))
+    }
+
+    const profiles   = await profilesQuery
     const sensorList = await db.select().from(sensors)
       .where(sql`${sensors.athlete_id} IN (${sql.join(ids.map(id => sql`${id}`), sql`, `)})`)
 
     const profileMap = Object.fromEntries(profiles.map(p => [p.user_id, p]))
     const sensorMap  = Object.fromEntries(sensorList.map(s => [s.athlete_id, s]))
 
-    const data = athleteRows.map(a => ({
+    // Para coach: exibe só atletas que têm profile vinculado ao coach
+    let data = athleteRows.map(a => ({
       ...a,
       profile: profileMap[a.id] ?? null,
       sensor:  sensorMap[a.id]  ?? null,
     }))
 
-    return NextResponse.json({ data, total, page, perPage, totalPages })
+    if (session.user.role === 'coach') {
+      data = data.filter(a => a.profile !== null)
+    }
+
+    return NextResponse.json({ data, total: data.length, page, perPage, totalPages })
 
   } catch (error) {
     console.error('[GET /api/athletes]', error)
@@ -124,10 +137,6 @@ export async function GET(request) {
 
 // ─────────────────────────────────────────────────────────────────────────────
 // POST /api/athletes
-// Role atribuído automaticamente com base em quem cadastra:
-//   tenant_admin / academy_coach → academy_athlete
-//   coach                        → coach_athlete
-//   super_admin                  → usa targetRole do body (academy_athlete | coach_athlete | athlete)
 // ─────────────────────────────────────────────────────────────────────────────
 export async function POST(request) {
   try {
@@ -167,7 +176,6 @@ export async function POST(request) {
       )
     }
 
-    // Determina o role do atleta automaticamente
     let athleteRole
     if (session.user.role === 'super_admin') {
       const validTargetRoles = ['academy_athlete', 'coach_athlete', 'athlete']
@@ -185,21 +193,20 @@ export async function POST(request) {
       ? (body.tenant_id ?? null)
       : session.user.tenant_id
 
-    // coach_id para vincular coach_athlete ao seu coach
     const coachId = session.user.role === 'coach' ? session.user.id : null
 
     await db.insert(users).values({
       id:             userId,
       tenant_id:      tenantId,
-      unit_id:        session.user.unit_id ?? body.unit_id ?? null,
+      unit_id:        nullify(session.user.unit_id ?? body.unit_id),
       name:           body.name.trim(),
       email:          body.email.toLowerCase().trim(),
       password_hash:  pwdHash,
       role:           athleteRole,
-      phone:          body.phone    ?? null,
-      gender:         body.gender   ?? null,
-      birthdate:      body.birthdate ?? null,
-      document:       body.document ?? null,
+      phone:          nullify(body.phone),
+      gender:         nullify(body.gender),      // '' → null (corrige ER_WARN_DATA_TRUNCATED)
+      birthdate:      nullify(body.birthdate),   // '' → null (corrige ER_TRUNCATED_WRONG_VALUE)
+      document:       nullify(body.document),
       is_active:      1,
       email_verified: 0,
     })
@@ -213,13 +220,13 @@ export async function POST(request) {
       hr_max:            hrMax,
       hr_rest:           body.hr_rest      ? parseInt(body.hr_rest)      : null,
       hr_threshold:      body.hr_threshold ? parseInt(body.hr_threshold) : null,
-      weight_kg:         body.weight_kg    ? String(body.weight_kg)      : null,
-      height_cm:         body.height_cm    ? String(body.height_cm)      : null,
-      body_fat_pct:      body.body_fat_pct ? String(body.body_fat_pct)   : null,
-      goal:              body.goal              ?? null,
-      medical_notes:     body.medical_notes     ?? null,
-      emergency_contact: body.emergency_contact ?? null,
-      emergency_phone:   body.emergency_phone   ?? null,
+      weight_kg:         nullify(body.weight_kg)    ? String(body.weight_kg)    : null,
+      height_cm:         nullify(body.height_cm)    ? String(body.height_cm)    : null,
+      body_fat_pct:      nullify(body.body_fat_pct) ? String(body.body_fat_pct) : null,
+      goal:              nullify(body.goal),
+      medical_notes:     nullify(body.medical_notes),
+      emergency_contact: nullify(body.emergency_contact),
+      emergency_phone:   nullify(body.emergency_phone),
       enrollment_date:   new Date().toISOString().split('T')[0],
       status:            'active',
       zone1_max: hrMax ? Math.round(hrMax * 0.60) : null,
