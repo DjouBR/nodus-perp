@@ -6,12 +6,11 @@ import { users, athlete_profiles, sensors, daily_logs, weekly_indices, session_a
 import { eq, and, or, desc } from 'drizzle-orm'
 import bcrypt from 'bcryptjs'
 
-// Todos os roles que representam um atleta no sistema
 const ATHLETE_ROLES = ['athlete', 'academy_athlete', 'coach_athlete']
 const isAthleteRole = col => or(...ATHLETE_ROLES.map(r => eq(col, r)))
 
 // ─────────────────────────────────────────────────────────────────────────────
-// GET /api/athletes/[id] — perfil completo
+// GET /api/athletes/[id]
 // ─────────────────────────────────────────────────────────────────────────────
 export async function GET(request, { params }) {
   try {
@@ -26,17 +25,11 @@ export async function GET(request, { params }) {
 
     if (!user) return NextResponse.json({ error: 'Atleta não encontrado' }, { status: 404 })
 
-    // Controle de acesso por role:
-    // - super_admin: vê qualquer atleta
-    // - coach: vê apenas coach_athlete vinculado ao seu tenant_id (ou sem tenant)
-    // - tenant_admin / academy_coach / receptionist: vêm apenas do mesmo tenant
     if (session.user.role !== 'super_admin') {
       if (session.user.role === 'coach') {
-        // coach vê apenas coach_athlete (tenant_id null ou mesmo tenant)
         if (user.role !== 'coach_athlete')
           return NextResponse.json({ error: 'Acesso negado' }, { status: 403 })
       } else {
-        // demais staff: mesmo tenant
         if (session.user.tenant_id !== user.tenant_id)
           return NextResponse.json({ error: 'Acesso negado' }, { status: 403 })
       }
@@ -88,7 +81,7 @@ export async function GET(request, { params }) {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// PUT /api/athletes/[id] — atualizar dados do atleta
+// PUT /api/athletes/[id]
 // ─────────────────────────────────────────────────────────────────────────────
 export async function PUT(request, { params }) {
   try {
@@ -112,13 +105,14 @@ export async function PUT(request, { params }) {
       return NextResponse.json({ error: 'Acesso negado' }, { status: 403 })
 
     const userUpdate = {}
-    if (body.name)       userUpdate.name        = body.name.trim()
-    if (body.phone)      userUpdate.phone       = body.phone
-    if (body.gender)     userUpdate.gender      = body.gender
-    if (body.birthdate)  userUpdate.birthdate   = body.birthdate
-    if (body.document)   userUpdate.document    = body.document
-    if (body.avatar_url) userUpdate.avatar_url  = body.avatar_url
-    if (body.password)   userUpdate.password_hash = await bcrypt.hash(body.password, 10)
+    if (body.name !== undefined)       userUpdate.name         = body.name.trim()
+    if (body.phone !== undefined)      userUpdate.phone        = body.phone
+    if (body.gender !== undefined)     userUpdate.gender       = body.gender || null
+    if (body.birthdate !== undefined)  userUpdate.birthdate    = body.birthdate || null
+    if (body.document !== undefined)   userUpdate.document     = body.document
+    if (body.avatar_url !== undefined) userUpdate.avatar_url   = body.avatar_url
+    if (body.is_active !== undefined)  userUpdate.is_active    = body.is_active
+    if (body.password)                 userUpdate.password_hash = await bcrypt.hash(body.password, 10)
 
     if (Object.keys(userUpdate).length > 0)
       await db.update(users).set(userUpdate).where(eq(users.id, id))
@@ -152,7 +146,10 @@ export async function PUT(request, { params }) {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// DELETE /api/athletes/[id] — inativar atleta (soft delete)
+// DELETE /api/athletes/[id]
+// Hard delete em cascata:
+//   session_athletes → athlete_profiles → sensors → daily_logs → weekly_indices → users
+// Query param: ?backup=1  (reservado para implementação futura de backup)
 // ─────────────────────────────────────────────────────────────────────────────
 export async function DELETE(request, { params }) {
   try {
@@ -161,9 +158,11 @@ export async function DELETE(request, { params }) {
 
     const allowedRoles = ['super_admin', 'tenant_admin', 'coach']
     if (!allowedRoles.includes(session.user.role))
-      return NextResponse.json({ error: 'Acesso negado — apenas admin pode inativar atletas' }, { status: 403 })
+      return NextResponse.json({ error: 'Acesso negado' }, { status: 403 })
 
     const { id } = await params
+    const { searchParams } = new URL(request.url)
+    const withBackup = searchParams.get('backup') === '1'
 
     const [user] = await db.select().from(users)
       .where(and(eq(users.id, id), isAthleteRole(users.role)))
@@ -174,10 +173,24 @@ export async function DELETE(request, { params }) {
     if (session.user.role !== 'super_admin' && session.user.tenant_id !== user.tenant_id)
       return NextResponse.json({ error: 'Acesso negado' }, { status: 403 })
 
-    await db.update(users).set({ is_active: 0 }).where(eq(users.id, id))
-    await db.update(athlete_profiles).set({ status: 'inactive' }).where(eq(athlete_profiles.user_id, id))
+    // TODO: implementar backup real (export JSON/CSV para storage) quando withBackup === true
+    // Por ora, apenas registra a intenção no log
+    if (withBackup) {
+      console.log(`[DELETE /api/athletes/${id}] Backup solicitado antes da exclusão de "${user.name}" — implementação pendente`)
+    }
 
-    return NextResponse.json({ message: 'Atleta inativado com sucesso' })
+    // Hard delete em cascata (ordem respeita FK constraints)
+    await db.delete(session_athletes).where(eq(session_athletes.athlete_id, id))
+    await db.delete(daily_logs).where(eq(daily_logs.athlete_id, id))
+    await db.delete(weekly_indices).where(eq(weekly_indices.athlete_id, id))
+    await db.delete(sensors).where(eq(sensors.athlete_id, id))
+    await db.delete(athlete_profiles).where(eq(athlete_profiles.user_id, id))
+    await db.delete(users).where(eq(users.id, id))
+
+    return NextResponse.json({
+      message: 'Atleta excluído permanentemente do banco de dados',
+      backup_requested: withBackup,
+    })
 
   } catch (error) {
     console.error('[DELETE /api/athletes/[id]]', error)

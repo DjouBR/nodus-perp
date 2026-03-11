@@ -3,6 +3,7 @@
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import NodusConfirmDialog from '@/components/NodusConfirmDialog'
+import NodusDeleteAthleteDialog from '@/components/NodusDeleteAthleteDialog'
 import NodusToast from '@/components/NodusToast'
 
 const GENDER_LABEL = { M: 'Masc.', F: 'Fem.', other: 'Outro' }
@@ -30,49 +31,58 @@ export default function AthleteTable({
   detailBasePath = '/athletes'
 }) {
   const router = useRouter()
-  const [pendingId,   setPendingId]   = useState(null)
-  const [dialog,      setDialog]      = useState(null) // { type: 'inactivate'|'delete', athlete }
-  const [toast,       setToast]       = useState({ open: false, message: '', severity: 'success' })
+  const [pendingId,       setPendingId]      = useState(null)
+  const [inactivateAthl, setInactivateAthl]  = useState(null) // atleta a inativar
+  const [deleteAthl,     setDeleteAthl]      = useState(null) // atleta a excluir
+  const [toast,          setToast]           = useState({ open: false, message: '', severity: 'success' })
 
   const showToast = (message, severity = 'success') =>
     setToast({ open: true, message, severity })
 
+  // ─── Inativar (soft) ───────────────────────────────────────────
   const handleInactivate = async () => {
-    const { id, name } = dialog.athlete
+    const { id, name } = inactivateAthl
     setPendingId(id)
     try {
       const res = await fetch(`/api/athletes/${id}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ is_active: 0 }),
+        body: JSON.stringify({ is_active: 0, status: 'inactive' }),
       })
       if (!res.ok) throw new Error('Falha ao inativar')
-      showToast(`Atleta "${name}" inativado com sucesso`)
+      showToast(`"${name}" foi inativado com sucesso`)
       onRefresh()
     } catch (err) {
       showToast(err.message, 'error')
     } finally {
       setPendingId(null)
-      setDialog(null)
+      setInactivateAthl(null)
     }
   }
 
-  const handleDelete = async () => {
-    const { id, name } = dialog.athlete
+  // ─── Excluir permanentemente (hard delete) ────────────────────────
+  const handleDelete = async ({ backup }) => {
+    const { id, name } = deleteAthl
     setPendingId(id)
     try {
-      const res = await fetch(`/api/athletes/${id}`, { method: 'DELETE' })
+      const url = `/api/athletes/${id}${backup ? '?backup=1' : ''}`
+      const res = await fetch(url, { method: 'DELETE' })
       if (!res.ok) {
         const json = await res.json().catch(() => ({}))
         throw new Error(json.error ?? 'Falha ao excluir')
       }
-      showToast(`Atleta "${name}" excluído com sucesso`)
+      showToast(
+        backup
+          ? `"${name}" excluído — backup solicitado (implementação futura)`
+          : `"${name}" foi excluído permanentemente do banco de dados`,
+        backup ? 'warning' : 'success'
+      )
       onRefresh()
     } catch (err) {
       showToast(err.message, 'error')
     } finally {
       setPendingId(null)
-      setDialog(null)
+      setDeleteAthl(null)
     }
   }
 
@@ -158,37 +168,42 @@ export default function AthleteTable({
                     </td>
                     <td className='px-5 py-3'>
                       <div className='flex items-center gap-1'>
-                        <button
-                          title='Ver perfil'
+                        {/* Ver perfil — sempre visível */}
+                        <button title='Ver perfil'
                           onClick={() => router.push(`${detailBasePath}/${a.id}`)}
-                          className='rounded-lg p-1.5 text-textSecondary hover:bg-primary/10 hover:text-primary transition-colors'
-                        >
+                          className='rounded-lg p-1.5 text-textSecondary hover:bg-primary/10 hover:text-primary transition-colors'>
                           <i className='tabler-eye text-lg' />
                         </button>
+
                         {canManage && (
                           <>
-                            <button
-                              title='Editar'
+                            {/* Editar */}
+                            <button title='Editar'
                               onClick={() => router.push(`${detailBasePath}/${a.id}?edit=1`)}
-                              className='rounded-lg p-1.5 text-textSecondary hover:bg-info/10 hover:text-info transition-colors'
-                            >
+                              className='rounded-lg p-1.5 text-textSecondary hover:bg-info/10 hover:text-info transition-colors'>
                               <i className='tabler-edit text-lg' />
                             </button>
-                            <button
-                              title='Inativar'
+
+                            {/* Inativar */}
+                            <button title='Inativar'
                               disabled={isBusy}
-                              onClick={() => setDialog({ type: 'inactivate', athlete: a })}
-                              className='rounded-lg p-1.5 text-textSecondary hover:bg-warning/10 hover:text-warning transition-colors disabled:opacity-50'
-                            >
-                              <i className={`text-lg ${isBusy ? 'tabler-loader-2 animate-spin' : 'tabler-user-off'}`} />
+                              onClick={() => setInactivateAthl(a)}
+                              className='rounded-lg p-1.5 text-textSecondary hover:bg-warning/10 hover:text-warning transition-colors disabled:opacity-50'>
+                              <i className={`text-lg ${
+                                isBusy && inactivateAthl?.id === a.id
+                                  ? 'tabler-loader-2 animate-spin' : 'tabler-user-off'
+                              }`} />
                             </button>
-                            <button
-                              title='Excluir'
+
+                            {/* Excluir — abre diálogo com 3 botões */}
+                            <button title='Excluir permanentemente'
                               disabled={isBusy}
-                              onClick={() => setDialog({ type: 'delete', athlete: a })}
-                              className='rounded-lg p-1.5 text-textSecondary hover:bg-error/10 hover:text-error transition-colors disabled:opacity-50'
-                            >
-                              <i className={`text-lg ${isBusy ? 'tabler-loader-2 animate-spin' : 'tabler-trash'}`} />
+                              onClick={() => setDeleteAthl(a)}
+                              className='rounded-lg p-1.5 text-textSecondary hover:bg-error/10 hover:text-error transition-colors disabled:opacity-50'>
+                              <i className={`text-lg ${
+                                isBusy && deleteAthl?.id === a.id
+                                  ? 'tabler-loader-2 animate-spin' : 'tabler-trash'
+                              }`} />
                             </button>
                           </>
                         )}
@@ -200,6 +215,8 @@ export default function AthleteTable({
             </tbody>
           </table>
         </div>
+
+        {/* Paginação */}
         <div className='flex items-center justify-between border-t border-border px-5 py-3 text-sm text-textSecondary'>
           <span>Mostrando {from}–{to} de {total}</span>
           <div className='flex items-center gap-1'>
@@ -230,28 +247,25 @@ export default function AthleteTable({
         </div>
       </div>
 
-      {/* Dialog Inativar */}
+      {/* Diálogo Inativar */}
       <NodusConfirmDialog
-        open={dialog?.type === 'inactivate'}
+        open={!!inactivateAthl}
         title='Inativar atleta'
-        message={`Deseja inativar "${dialog?.athlete?.name}"? O atleta perderá acesso ao sistema.`}
+        message={`Deseja inativar "${inactivateAthl?.name}"? O atleta perderá acesso mas seus dados serão preservados.`}
         confirmText='Inativar'
         color='warning'
-        loading={pendingId === dialog?.athlete?.id}
+        loading={pendingId === inactivateAthl?.id}
         onConfirm={handleInactivate}
-        onCancel={() => setDialog(null)}
+        onCancel={() => setInactivateAthl(null)}
       />
 
-      {/* Dialog Excluir */}
-      <NodusConfirmDialog
-        open={dialog?.type === 'delete'}
-        title='Excluir atleta'
-        message={`Deseja excluir permanentemente "${dialog?.athlete?.name}"? Esta ação não pode ser desfeita.`}
-        confirmText='Excluir'
-        color='error'
-        loading={pendingId === dialog?.athlete?.id}
-        onConfirm={handleDelete}
-        onCancel={() => setDialog(null)}
+      {/* Diálogo Excluir (3 botões) */}
+      <NodusDeleteAthleteDialog
+        open={!!deleteAthl}
+        athlete={deleteAthl}
+        loading={!!pendingId}
+        onDelete={handleDelete}
+        onCancel={() => setDeleteAthl(null)}
       />
 
       <NodusToast
