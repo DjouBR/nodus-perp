@@ -3,12 +3,23 @@
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import NodusConfirmDialog from '@/components/NodusConfirmDialog'
+import NodusDeleteDialog from '@/components/NodusDeleteDialog'
 import NodusToast from '@/components/NodusToast'
 
 const ROLE_CONFIG = {
   tenant_admin: { label: 'Academia / Franquia',    color: 'bg-info/10 text-info',      icon: 'tabler-building-community' },
   coach:        { label: 'Treinador Independente', color: 'bg-warning/10 text-warning', icon: 'tabler-user-star'           },
   athlete:      { label: 'Atleta Independente',    color: 'bg-success/10 text-success', icon: 'tabler-user'                },
+}
+
+// Itens a excluir conforme o role do cliente
+const DELETE_ITEMS = {
+  coach:         ['Dados pessoais e credenciais', 'Perfil do treinador', 'Histórico de sessões criadas', 'Participações de atletas nas sessões', 'Séries de FC das sessões'],
+  academy_coach: ['Dados pessoais e credenciais', 'Perfil do treinador', 'Histórico de sessões criadas', 'Participações de atletas nas sessões', 'Séries de FC das sessões'],
+  athlete:       ['Dados pessoais e credenciais', 'Ficha esportiva', 'Histórico de sessões', 'Logs diários e índices semanais (ACWR)', 'Sensores vinculados'],
+  academy_athlete: ['Dados pessoais e credenciais', 'Ficha esportiva', 'Histórico de sessões', 'Logs diários e índices semanais (ACWR)', 'Sensores vinculados'],
+  coach_athlete:   ['Dados pessoais e credenciais', 'Ficha esportiva', 'Histórico de sessões', 'Logs diários e índices semanais (ACWR)', 'Sensores vinculados'],
+  default:       ['Dados pessoais e credenciais de acesso'],
 }
 
 const AVATAR_COLORS = ['#7367F0','#28C76F','#FF9F43','#00CFE8','#EA5455']
@@ -18,15 +29,17 @@ const fmtDate = d => d ? new Date(d).toLocaleDateString('pt-BR') : '—'
 
 export default function ClientTable({ clients, loading, page, totalPages, onPageChange, onRefresh }) {
   const router = useRouter()
-  const [pendingId, setPendingId] = useState(null)
-  const [dialog,    setDialog]    = useState(null) // { type: 'toggle'|'delete', client }
-  const [toast,     setToast]     = useState({ open: false, message: '', severity: 'success' })
+  const [pendingId,      setPendingId]     = useState(null)
+  const [toggleClient,   setToggleClient]  = useState(null) // inativar/reativar
+  const [deleteClient,   setDeleteClient]  = useState(null) // excluir permanentemente
+  const [toast,          setToast]         = useState({ open: false, message: '', severity: 'success' })
 
   const showToast = (message, severity = 'success') =>
     setToast({ open: true, message, severity })
 
+  // ─── Inativar / Reativar (soft) ──────────────────────────────
   const handleToggle = async () => {
-    const c = dialog.client
+    const c = toggleClient
     setPendingId(c.id)
     try {
       const res = await fetch(`/api/admin/clients/${c.id}`, {
@@ -41,26 +54,33 @@ export default function ClientTable({ clients, loading, page, totalPages, onPage
       showToast(err.message, 'error')
     } finally {
       setPendingId(null)
-      setDialog(null)
+      setToggleClient(null)
     }
   }
 
-  const handleDelete = async () => {
-    const c = dialog.client
+  // ─── Excluir permanentemente (hard delete) ───────────────────────
+  const handleDelete = async ({ backup }) => {
+    const c = deleteClient
     setPendingId(c.id)
     try {
-      const res = await fetch(`/api/admin/clients/${c.id}`, { method: 'DELETE' })
+      const url = `/api/admin/clients/${c.id}${backup ? '?backup=1' : ''}`
+      const res = await fetch(url, { method: 'DELETE' })
       if (!res.ok) {
         const json = await res.json().catch(() => ({}))
         throw new Error(json.error ?? 'Falha ao excluir')
       }
-      showToast(`Cliente "${c.name}" excluído com sucesso`)
+      showToast(
+        backup
+          ? `"${c.name}" excluído — backup solicitado (implementação futura)`
+          : `"${c.name}" foi excluído permanentemente`,
+        backup ? 'warning' : 'success'
+      )
       onRefresh()
     } catch (err) {
       showToast(err.message, 'error')
     } finally {
       setPendingId(null)
-      setDialog(null)
+      setDeleteClient(null)
     }
   }
 
@@ -72,8 +92,7 @@ export default function ClientTable({ clients, loading, page, totalPages, onPage
 
   if (!clients.length) return (
     <div className='flex flex-col items-center justify-center gap-2 rounded-xl border py-16'
-      style={{ backgroundColor: 'var(--mui-palette-background-paper)', color: 'var(--mui-palette-text-secondary)' }}
-    >
+      style={{ backgroundColor: 'var(--mui-palette-background-paper)', color: 'var(--mui-palette-text-secondary)' }}>
       <i className='tabler-users-off text-4xl' />
       <p>Nenhum cliente encontrado</p>
     </div>
@@ -83,13 +102,11 @@ export default function ClientTable({ clients, loading, page, totalPages, onPage
     <>
       <div className='flex flex-col gap-4'>
         <div className='overflow-x-auto rounded-xl shadow-sm'
-          style={{ backgroundColor: 'var(--mui-palette-background-paper)' }}
-        >
+          style={{ backgroundColor: 'var(--mui-palette-background-paper)' }}>
           <table className='w-full text-sm'>
             <thead>
               <tr className='border-b text-left text-xs'
-                style={{ color: 'var(--mui-palette-text-secondary)', borderColor: 'var(--mui-palette-divider)' }}
-              >
+                style={{ color: 'var(--mui-palette-text-secondary)', borderColor: 'var(--mui-palette-divider)' }}>
                 <th className='px-4 py-3'>Cliente</th>
                 <th className='px-4 py-3'>Tipo</th>
                 <th className='px-4 py-3'>Tenant / Plano</th>
@@ -101,25 +118,19 @@ export default function ClientTable({ clients, loading, page, totalPages, onPage
             </thead>
             <tbody>
               {clients.map(c => {
-                const rc = ROLE_CONFIG[c.role] ?? { label: c.role, color: 'bg-secondary/10 text-secondary', icon: 'tabler-user' }
+                const rc     = ROLE_CONFIG[c.role] ?? { label: c.role, color: 'bg-secondary/10 text-secondary', icon: 'tabler-user' }
                 const isBusy = pendingId === c.id
                 return (
-                  <tr key={c.id}
-                    className='border-b last:border-0 transition-colors hover:bg-action-hover'
-                    style={{ borderColor: 'var(--mui-palette-divider)' }}
-                  >
+                  <tr key={c.id} className='border-b last:border-0 transition-colors hover:bg-action-hover'
+                    style={{ borderColor: 'var(--mui-palette-divider)' }}>
                     <td className='px-4 py-3'>
                       <div className='flex items-center gap-3'>
-                        {c.avatar_url ? (
-                          <img src={c.avatar_url} alt={c.name} className='h-9 w-9 rounded-full object-cover' />
-                        ) : (
-                          <div
-                            className='flex h-9 w-9 items-center justify-center rounded-full text-xs font-bold text-white'
-                            style={{ backgroundColor: avatarColor(c.name) }}
-                          >
-                            {getInitials(c.name)}
-                          </div>
-                        )}
+                        {c.avatar_url
+                          ? <img src={c.avatar_url} alt={c.name} className='h-9 w-9 rounded-full object-cover' />
+                          : <div className='flex h-9 w-9 items-center justify-center rounded-full text-xs font-bold text-white'
+                              style={{ backgroundColor: avatarColor(c.name) }}>
+                              {getInitials(c.name)}
+                            </div>}
                         <div>
                           <p className='font-medium'>{c.name}</p>
                           <p className='text-xs' style={{ color: 'var(--mui-palette-text-secondary)' }}>{c.email}</p>
@@ -140,16 +151,10 @@ export default function ClientTable({ clients, loading, page, totalPages, onPage
                             {{ franchise:'Franquia', academy:'Academia', trainer:'Treinador' }[c.tenant_type] ?? c.tenant_type}
                           </p>
                         </div>
-                      ) : (
-                        <span style={{ color: 'var(--mui-palette-text-disabled)' }}>—</span>
-                      )}
+                      ) : <span style={{ color: 'var(--mui-palette-text-disabled)' }}>—</span>}
                     </td>
-                    <td className='px-4 py-3 text-xs' style={{ color: 'var(--mui-palette-text-secondary)' }}>
-                      {fmtDate(c.created_at)}
-                    </td>
-                    <td className='px-4 py-3 text-xs' style={{ color: 'var(--mui-palette-text-secondary)' }}>
-                      {fmtDate(c.last_login)}
-                    </td>
+                    <td className='px-4 py-3 text-xs' style={{ color: 'var(--mui-palette-text-secondary)' }}>{fmtDate(c.created_at)}</td>
+                    <td className='px-4 py-3 text-xs' style={{ color: 'var(--mui-palette-text-secondary)' }}>{fmtDate(c.last_login)}</td>
                     <td className='px-4 py-3'>
                       <span className={`rounded-full px-2.5 py-1 text-xs font-medium ${
                         c.is_active ? 'bg-success/10 text-success' : 'bg-error/10 text-error'
@@ -168,24 +173,22 @@ export default function ClientTable({ clients, loading, page, totalPages, onPage
                           <i className='tabler-edit text-base' />
                         </button>
                         <button
-                          onClick={() => setDialog({ type: 'toggle', client: c })}
+                          onClick={() => setToggleClient(c)}
                           disabled={isBusy}
                           className={`rounded p-1.5 disabled:opacity-50 ${
                             c.is_active ? 'text-warning hover:bg-warning/10' : 'text-success hover:bg-success/10'
                           }`}
-                          title={c.is_active ? 'Inativar' : 'Reativar'}
-                        >
+                          title={c.is_active ? 'Inativar' : 'Reativar'}>
                           <i className={`text-base ${
                             isBusy ? 'tabler-loader-2 animate-spin'
                             : c.is_active ? 'tabler-user-off' : 'tabler-user-check'
                           }`} />
                         </button>
                         <button
-                          onClick={() => setDialog({ type: 'delete', client: c })}
+                          onClick={() => setDeleteClient(c)}
                           disabled={isBusy}
                           className='rounded p-1.5 text-error hover:bg-error/10 disabled:opacity-50'
-                          title='Excluir'
-                        >
+                          title='Excluir permanentemente'>
                           <i className={`text-base ${isBusy ? 'tabler-loader-2 animate-spin' : 'tabler-trash'}`} />
                         </button>
                       </div>
@@ -199,50 +202,42 @@ export default function ClientTable({ clients, loading, page, totalPages, onPage
         {totalPages > 1 && (
           <div className='flex items-center justify-end gap-2'>
             <button onClick={() => onPageChange(p => Math.max(1, p - 1))} disabled={page === 1}
-              className='rounded border px-3 py-1 text-sm disabled:opacity-40 hover:bg-action-hover'>
-              ‹ Anterior
-            </button>
+              className='rounded border px-3 py-1 text-sm disabled:opacity-40 hover:bg-action-hover'>‹ Anterior</button>
             <span className='text-sm' style={{ color: 'var(--mui-palette-text-secondary)' }}>Página {page} de {totalPages}</span>
             <button onClick={() => onPageChange(p => Math.min(totalPages, p + 1))} disabled={page === totalPages}
-              className='rounded border px-3 py-1 text-sm disabled:opacity-40 hover:bg-action-hover'>
-              Próxima ›
-            </button>
+              className='rounded border px-3 py-1 text-sm disabled:opacity-40 hover:bg-action-hover'>Próxima ›</button>
           </div>
         )}
       </div>
 
-      {/* Dialog Inativar/Reativar */}
+      {/* Diálogo Inativar/Reativar */}
       <NodusConfirmDialog
-        open={dialog?.type === 'toggle'}
-        title={dialog?.client?.is_active ? 'Inativar cliente' : 'Reativar cliente'}
-        message={dialog?.client?.is_active
-          ? `Deseja inativar "${dialog?.client?.name}"? O cliente perderá acesso ao sistema.`
-          : `Deseja reativar "${dialog?.client?.name}"?`}
-        confirmText={dialog?.client?.is_active ? 'Inativar' : 'Reativar'}
-        color={dialog?.client?.is_active ? 'warning' : 'success'}
-        loading={pendingId === dialog?.client?.id}
+        open={!!toggleClient}
+        title={toggleClient?.is_active ? 'Inativar cliente' : 'Reativar cliente'}
+        message={toggleClient?.is_active
+          ? `Deseja inativar "${toggleClient?.name}"? O cliente perderá acesso ao sistema.`
+          : `Deseja reativar "${toggleClient?.name}"?`}
+        confirmText={toggleClient?.is_active ? 'Inativar' : 'Reativar'}
+        color={toggleClient?.is_active ? 'warning' : 'success'}
+        loading={pendingId === toggleClient?.id}
         onConfirm={handleToggle}
-        onCancel={() => setDialog(null)}
+        onCancel={() => setToggleClient(null)}
       />
 
-      {/* Dialog Excluir */}
-      <NodusConfirmDialog
-        open={dialog?.type === 'delete'}
-        title='Excluir cliente'
-        message={`Deseja excluir permanentemente "${dialog?.client?.name}"? Esta ação não pode ser desfeita.`}
-        confirmText='Excluir'
-        color='error'
-        loading={pendingId === dialog?.client?.id}
-        onConfirm={handleDelete}
-        onCancel={() => setDialog(null)}
+      {/* Diálogo Excluir (3 botões) */}
+      <NodusDeleteDialog
+        open={!!deleteClient}
+        title='Excluir cliente permanentemente'
+        name={deleteClient?.name}
+        subtitle={`${deleteClient?.email} — ${ROLE_CONFIG[deleteClient?.role]?.label ?? deleteClient?.role}`}
+        items={DELETE_ITEMS[deleteClient?.role] ?? DELETE_ITEMS.default}
+        loading={!!pendingId}
+        onDelete={handleDelete}
+        onCancel={() => setDeleteClient(null)}
       />
 
-      <NodusToast
-        open={toast.open}
-        message={toast.message}
-        severity={toast.severity}
-        onClose={() => setToast(t => ({ ...t, open: false }))}
-      />
+      <NodusToast open={toast.open} message={toast.message} severity={toast.severity}
+        onClose={() => setToast(t => ({ ...t, open: false }))} />
     </>
   )
 }

@@ -3,6 +3,7 @@
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import NodusConfirmDialog from '@/components/NodusConfirmDialog'
+import NodusDeleteDialog from '@/components/NodusDeleteDialog'
 import NodusToast from '@/components/NodusToast'
 
 const TYPE_LABELS = {
@@ -13,59 +14,65 @@ const TYPE_LABELS = {
 function getInitials(name = '') {
   return name.split(' ').slice(0, 2).map(n => n[0]).join('').toUpperCase()
 }
-
 const AVATAR_COLORS = ['#7367F0','#28C76F','#FF9F43','#00CFE8','#EA5455']
 function avatarColor(name = '') {
   return AVATAR_COLORS[name.charCodeAt(0) % AVATAR_COLORS.length]
 }
 
-export default function CoachTable({
-  coaches, loading, page, totalPages, onPageChange, onRefresh, canManage
-}) {
-  const router    = useRouter()
-  const [dialog,  setDialog]  = useState(null)
-  const [pending, setPending] = useState(null)
-  const [toast,   setToast]   = useState({ open: false, message: '', severity: 'success' })
+export default function CoachTable({ coaches, loading, page, totalPages, onPageChange, onRefresh, canManage }) {
+  const router = useRouter()
+  const [inactivateCoach, setInactivateCoach] = useState(null)
+  const [deleteCoach,     setDeleteCoach]     = useState(null)
+  const [pending,         setPending]         = useState(null)
+  const [toast,           setToast]           = useState({ open: false, message: '', severity: 'success' })
 
   const showToast = (message, severity = 'success') =>
     setToast({ open: true, message, severity })
 
+  // ─── Inativar (soft — apenas is_active=0) ───────────────────────────
   const handleInactivate = async () => {
-    const { id, name } = dialog.coach
-    setPending(id)
+    const c = inactivateCoach
+    setPending(c.id)
     try {
-      const res = await fetch(`/api/coaches/${id}`, {
+      const res = await fetch(`/api/coaches/${c.id}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ is_active: dialog.coach.is_active ? 0 : 1 }),
+        body: JSON.stringify({ is_active: c.is_active ? 0 : 1 }),
       })
       if (!res.ok) throw new Error('Falha ao atualizar status')
-      showToast(`Treinador "${name}" ${dialog.coach.is_active ? 'inativado' : 'reativado'} com sucesso`)
+      showToast(`Treinador "${c.name}" ${c.is_active ? 'inativado' : 'reativado'} com sucesso`)
       onRefresh()
     } catch (err) {
       showToast(err.message, 'error')
     } finally {
       setPending(null)
-      setDialog(null)
+      setInactivateCoach(null)
     }
   }
 
-  const handleDelete = async () => {
-    const { id, name } = dialog.coach
-    setPending(id)
+  // ─── Excluir permanentemente (hard delete) ────────────────────────
+  const handleDelete = async ({ backup }) => {
+    const c = deleteCoach
+    setPending(c.id)
     try {
-      const res = await fetch(`/api/coaches/${id}`, { method: 'DELETE' })
+      const url = `/api/coaches/${c.id}${backup ? '?backup=1' : ''}`
+      const res = await fetch(url, { method: 'DELETE' })
       if (!res.ok) {
         const json = await res.json().catch(() => ({}))
         throw new Error(json.error ?? 'Falha ao excluir')
       }
-      showToast(`Treinador "${name}" excluído com sucesso`)
+      showToast(
+        backup
+          ? `"${c.name}" excluído — backup solicitado (implementação futura)`
+          : `"${c.name}" foi excluído permanentemente`,
+        backup ? 'warning' : 'success'
+      )
       onRefresh()
     } catch (err) {
       showToast(err.message, 'error')
     } finally {
       setPending(null)
-      setDialog(null)
+      setDeleteCoach(null)
     }
   }
 
@@ -105,14 +112,12 @@ export default function CoachTable({
                   <tr key={c.id} className='border-b last:border-0 hover:bg-action-hover transition-colors'>
                     <td className='px-4 py-3'>
                       <div className='flex items-center gap-3'>
-                        {c.avatar_url ? (
-                          <img src={c.avatar_url} alt={c.name} className='h-9 w-9 rounded-full object-cover' />
-                        ) : (
-                          <div className='flex h-9 w-9 items-center justify-center rounded-full text-xs font-bold text-white'
-                            style={{ backgroundColor: avatarColor(c.name) }}>
-                            {getInitials(c.name)}
-                          </div>
-                        )}
+                        {c.avatar_url
+                          ? <img src={c.avatar_url} alt={c.name} className='h-9 w-9 rounded-full object-cover' />
+                          : <div className='flex h-9 w-9 items-center justify-center rounded-full text-xs font-bold text-white'
+                              style={{ backgroundColor: avatarColor(c.name) }}>
+                              {getInitials(c.name)}
+                            </div>}
                         <div>
                           <p className='font-medium'>{c.name}</p>
                           <p className='text-xs text-textSecondary'>{c.email}</p>
@@ -133,41 +138,39 @@ export default function CoachTable({
                         {c.is_active ? 'Ativo' : 'Inativo'}
                       </span>
                     </td>
-                    {/* Ações — sempre visível, mas operações destrutivas só para canManage */}
                     <td className='px-4 py-3'>
                       <div className='flex items-center justify-end gap-1'>
-                        <button
-                          onClick={() => router.push(`/coaches/${c.id}`)}
-                          className='rounded p-1.5 hover:bg-primary/10 text-primary'
-                          title='Ver perfil'
-                        >
+                        {/* Ver perfil — sempre visível */}
+                        <button onClick={() => router.push(`/coaches/${c.id}`)}
+                          className='rounded p-1.5 hover:bg-primary/10 text-primary' title='Ver perfil'>
                           <i className='tabler-eye text-base' />
                         </button>
                         {canManage && (
                           <>
-                            <button
-                              onClick={() => router.push(`/coaches/${c.id}?edit=1`)}
-                              className='rounded p-1.5 hover:bg-info/10 text-info'
-                              title='Editar'
-                            >
+                            {/* Editar */}
+                            <button onClick={() => router.push(`/coaches/${c.id}?edit=1`)}
+                              className='rounded p-1.5 hover:bg-info/10 text-info' title='Editar'>
                               <i className='tabler-edit text-base' />
                             </button>
+                            {/* Inativar / Reativar */}
                             <button
-                              onClick={() => setDialog({ type: 'toggle', coach: c })}
+                              onClick={() => setInactivateCoach(c)}
                               disabled={isBusy}
                               className={`rounded p-1.5 disabled:opacity-50 ${
                                 c.is_active ? 'text-warning hover:bg-warning/10' : 'text-success hover:bg-success/10'
                               }`}
-                              title={c.is_active ? 'Inativar' : 'Reativar'}
-                            >
-                              <i className={`text-base ${isBusy ? 'tabler-loader-2 animate-spin' : c.is_active ? 'tabler-user-off' : 'tabler-user-check'}`} />
+                              title={c.is_active ? 'Inativar' : 'Reativar'}>
+                              <i className={`text-base ${
+                                isBusy ? 'tabler-loader-2 animate-spin'
+                                : c.is_active ? 'tabler-user-off' : 'tabler-user-check'
+                              }`} />
                             </button>
+                            {/* Excluir permanentemente */}
                             <button
-                              onClick={() => setDialog({ type: 'delete', coach: c })}
+                              onClick={() => setDeleteCoach(c)}
                               disabled={isBusy}
                               className='rounded p-1.5 hover:bg-error/10 text-error disabled:opacity-50'
-                              title='Excluir'
-                            >
+                              title='Excluir permanentemente'>
                               <i className={`text-base ${isBusy ? 'tabler-loader-2 animate-spin' : 'tabler-trash'}`} />
                             </button>
                           </>
@@ -191,28 +194,36 @@ export default function CoachTable({
         )}
       </div>
 
+      {/* Diálogo Inativar/Reativar */}
       <NodusConfirmDialog
-        open={dialog?.type === 'toggle'}
-        title={dialog?.coach?.is_active ? 'Inativar treinador' : 'Reativar treinador'}
-        message={dialog?.coach?.is_active
-          ? `Deseja inativar "${dialog?.coach?.name}"?`
-          : `Deseja reativar "${dialog?.coach?.name}"?`}
-        confirmText={dialog?.coach?.is_active ? 'Inativar' : 'Reativar'}
-        color={dialog?.coach?.is_active ? 'warning' : 'success'}
-        loading={pending === dialog?.coach?.id}
+        open={!!inactivateCoach}
+        title={inactivateCoach?.is_active ? 'Inativar treinador' : 'Reativar treinador'}
+        message={inactivateCoach?.is_active
+          ? `Deseja inativar "${inactivateCoach?.name}"? O treinador perderá acesso ao sistema.`
+          : `Deseja reativar "${inactivateCoach?.name}"?`}
+        confirmText={inactivateCoach?.is_active ? 'Inativar' : 'Reativar'}
+        color={inactivateCoach?.is_active ? 'warning' : 'success'}
+        loading={pending === inactivateCoach?.id}
         onConfirm={handleInactivate}
-        onCancel={() => setDialog(null)}
+        onCancel={() => setInactivateCoach(null)}
       />
 
-      <NodusConfirmDialog
-        open={dialog?.type === 'delete'}
-        title='Excluir treinador'
-        message={`Deseja excluir permanentemente "${dialog?.coach?.name}"? Esta ação não pode ser desfeita.`}
-        confirmText='Excluir'
-        color='error'
-        loading={pending === dialog?.coach?.id}
-        onConfirm={handleDelete}
-        onCancel={() => setDialog(null)}
+      {/* Diálogo Excluir (3 botões) */}
+      <NodusDeleteDialog
+        open={!!deleteCoach}
+        title='Excluir treinador permanentemente'
+        name={deleteCoach?.name}
+        subtitle={deleteCoach?.email}
+        items={[
+          'Dados pessoais e credenciais de acesso',
+          'Perfil e certificados do treinador',
+          'Histórico de sessões de treino criadas por ele',
+          'Participações de atletas nessas sessões',
+          'Séries de FC das sessões',
+        ]}
+        loading={!!pending}
+        onDelete={handleDelete}
+        onCancel={() => setDeleteCoach(null)}
       />
 
       <NodusToast open={toast.open} message={toast.message} severity={toast.severity}
