@@ -9,6 +9,15 @@ import bcrypt from 'bcryptjs'
 const ATHLETE_ROLES = ['athlete', 'academy_athlete', 'coach_athlete']
 const isAthleteRole = col => or(...ATHLETE_ROLES.map(r => eq(col, r)))
 
+// Converte '', undefined, null → null (protege colunas int/float/date do MySQL)
+const nullify = v => (v === '' || v === undefined || v === null) ? null : v
+// Para int/float: null ou número válido; string vazia → null
+const nullifyNum = v => {
+  if (v === '' || v === undefined || v === null) return null
+  const n = Number(v)
+  return isNaN(n) ? null : n
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 // GET /api/athletes/[id]
 // ─────────────────────────────────────────────────────────────────────────────
@@ -82,6 +91,8 @@ export async function GET(request, { params }) {
 
 // ─────────────────────────────────────────────────────────────────────────────
 // PUT /api/athletes/[id]
+// Usa nullify() para strings e nullifyNum() para int/float
+// Garante que '' nunca vá para colunas numéricas do MySQL
 // ─────────────────────────────────────────────────────────────────────────────
 export async function PUT(request, { params }) {
   try {
@@ -104,38 +115,60 @@ export async function PUT(request, { params }) {
     if (session.user.role !== 'super_admin' && session.user.tenant_id !== user.tenant_id)
       return NextResponse.json({ error: 'Acesso negado' }, { status: 403 })
 
+    // ── campos da tabela users ──────────────────────────────────────
     const userUpdate = {}
-    if (body.name !== undefined)       userUpdate.name         = body.name.trim()
-    if (body.phone !== undefined)      userUpdate.phone        = body.phone
-    if (body.gender !== undefined)     userUpdate.gender       = body.gender || null
-    if (body.birthdate !== undefined)  userUpdate.birthdate    = body.birthdate || null
-    if (body.document !== undefined)   userUpdate.document     = body.document
-    if (body.avatar_url !== undefined) userUpdate.avatar_url   = body.avatar_url
-    if (body.is_active !== undefined)  userUpdate.is_active    = body.is_active
-    if (body.password)                 userUpdate.password_hash = await bcrypt.hash(body.password, 10)
+    if (body.name      !== undefined) userUpdate.name         = body.name?.trim() || null
+    if (body.phone     !== undefined) userUpdate.phone        = nullify(body.phone)
+    if (body.gender    !== undefined) userUpdate.gender       = nullify(body.gender)
+    if (body.birthdate !== undefined) userUpdate.birthdate    = nullify(body.birthdate)
+    if (body.document  !== undefined) userUpdate.document     = nullify(body.document)
+    if (body.avatar_url !== undefined) userUpdate.avatar_url  = nullify(body.avatar_url)
+    if (body.is_active !== undefined) userUpdate.is_active    = body.is_active ? 1 : 0
+    if (body.password)                userUpdate.password_hash = await bcrypt.hash(body.password, 10)
 
     if (Object.keys(userUpdate).length > 0)
       await db.update(users).set(userUpdate).where(eq(users.id, id))
 
+    // ── campos da tabela athlete_profiles ──────────────────────────
+    // Campos numéricos (int/float): usar nullifyNum para evitar ER_TRUNCATED_WRONG_VALUE
+    // Campos texto: usar nullify
+    const numFields  = ['hr_max','hr_rest','hr_threshold','weight_kg','height_cm','body_fat_pct',
+                        'zone1_max','zone2_max','zone3_max','zone4_max']
+    const textFields = ['goal','medical_notes','emergency_contact','emergency_phone',
+                        'plan_id','enrollment_date','status']
+
     const profileUpdate = {}
-    const profileFields = [
-      'hr_max','hr_rest','hr_threshold','weight_kg','height_cm',
-      'body_fat_pct','goal','medical_notes','emergency_contact',
-      'emergency_phone','zone1_max','zone2_max','zone3_max','zone4_max',
-      'plan_id','enrollment_date','status',
-    ]
-    for (const field of profileFields) {
-      if (body[field] !== undefined) profileUpdate[field] = body[field]
-    }
+    for (const f of numFields)  { if (body[f] !== undefined) profileUpdate[f] = nullifyNum(body[f]) }
+    for (const f of textFields) { if (body[f] !== undefined) profileUpdate[f] = nullify(body[f]) }
+
+    // Recalcula zonas automaticamente se hr_max foi enviado e zonas não foram
     if (body.hr_max && !body.zone1_max) {
       const hm = parseInt(body.hr_max)
-      profileUpdate.zone1_max = Math.round(hm * 0.60)
-      profileUpdate.zone2_max = Math.round(hm * 0.70)
-      profileUpdate.zone3_max = Math.round(hm * 0.80)
-      profileUpdate.zone4_max = Math.round(hm * 0.90)
+      if (!isNaN(hm) && hm > 0) {
+        profileUpdate.zone1_max = Math.round(hm * 0.60)
+        profileUpdate.zone2_max = Math.round(hm * 0.70)
+        profileUpdate.zone3_max = Math.round(hm * 0.80)
+        profileUpdate.zone4_max = Math.round(hm * 0.90)
+      }
     }
-    if (Object.keys(profileUpdate).length > 0)
-      await db.update(athlete_profiles).set(profileUpdate).where(eq(athlete_profiles.user_id, id))
+
+    if (Object.keys(profileUpdate).length > 0) {
+      // Upsert: se não existir o profile, cria
+      const [existingProfile] = await db.select({ user_id: athlete_profiles.user_id })
+        .from(athlete_profiles).where(eq(athlete_profiles.user_id, id)).limit(1)
+
+      if (existingProfile) {
+        await db.update(athlete_profiles).set(profileUpdate).where(eq(athlete_profiles.user_id, id))
+      } else {
+        const { randomUUID } = await import('crypto')
+        await db.insert(athlete_profiles).values({
+          id: randomUUID(),
+          user_id: id,
+          tenant_id: user.tenant_id,
+          ...profileUpdate,
+        })
+      }
+    }
 
     return NextResponse.json({ message: 'Atleta atualizado com sucesso' })
 
@@ -146,10 +179,9 @@ export async function PUT(request, { params }) {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// DELETE /api/athletes/[id]
-// Hard delete em cascata:
-//   session_athletes → athlete_profiles → sensors → daily_logs → weekly_indices → users
-// Query param: ?backup=1  (reservado para implementação futura de backup)
+// DELETE /api/athletes/[id] — hard delete em cascata
+// session_athletes → daily_logs → weekly_indices → sensors → athlete_profiles → users
+// Query param: ?backup=1 (reservado para implementação futura)
 // ─────────────────────────────────────────────────────────────────────────────
 export async function DELETE(request, { params }) {
   try {
@@ -173,13 +205,10 @@ export async function DELETE(request, { params }) {
     if (session.user.role !== 'super_admin' && session.user.tenant_id !== user.tenant_id)
       return NextResponse.json({ error: 'Acesso negado' }, { status: 403 })
 
-    // TODO: implementar backup real (export JSON/CSV para storage) quando withBackup === true
-    // Por ora, apenas registra a intenção no log
     if (withBackup) {
-      console.log(`[DELETE /api/athletes/${id}] Backup solicitado antes da exclusão de "${user.name}" — implementação pendente`)
+      console.log(`[DELETE /api/athletes/${id}] Backup solicitado — "${user.name}" — implementação pendente`)
     }
 
-    // Hard delete em cascata (ordem respeita FK constraints)
     await db.delete(session_athletes).where(eq(session_athletes.athlete_id, id))
     await db.delete(daily_logs).where(eq(daily_logs.athlete_id, id))
     await db.delete(weekly_indices).where(eq(weekly_indices.athlete_id, id))

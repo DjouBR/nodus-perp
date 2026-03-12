@@ -3,15 +3,16 @@
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import NodusConfirmDialog from '@/components/NodusConfirmDialog'
-import NodusDeleteAthleteDialog from '@/components/NodusDeleteAthleteDialog'
+import NodusDeleteDialog from '@/components/NodusDeleteDialog'
 import NodusToast from '@/components/NodusToast'
 
 const GENDER_LABEL = { M: 'Masc.', F: 'Fem.', other: 'Outro' }
 
 const STATUS_STYLE = {
-  active:    { label: 'Ativo',    cls: 'bg-success/15 text-success' },
-  inactive:  { label: 'Inativo',  cls: 'bg-warning/15 text-warning' },
-  suspended: { label: 'Suspenso', cls: 'bg-error/15 text-error'     },
+  active:           { label: 'Ativo',             cls: 'bg-success/15 text-success' },
+  inactive:         { label: 'Inativo',            cls: 'bg-warning/15 text-warning' },
+  suspended:        { label: 'Suspenso',           cls: 'bg-error/15 text-error'     },
+  pending_deletion: { label: 'Exclusão pendente',  cls: 'bg-error/15 text-error'     },
 }
 
 function Avatar({ name, avatar_url }) {
@@ -31,41 +32,51 @@ export default function AthleteTable({
   detailBasePath = '/athletes'
 }) {
   const router = useRouter()
-  const [pendingId,       setPendingId]      = useState(null)
-  const [inactivateAthl, setInactivateAthl]  = useState(null) // atleta a inativar
-  const [deleteAthl,     setDeleteAthl]      = useState(null) // atleta a excluir
-  const [toast,          setToast]           = useState({ open: false, message: '', severity: 'success' })
+  const [pendingId,      setPendingId]     = useState(null)
+  const [toggleAthl,     setToggleAthl]    = useState(null) // inativar OU reativar
+  const [deleteAthl,     setDeleteAthl]    = useState(null) // excluir permanentemente
+  const [toast,          setToast]         = useState({ open: false, message: '', severity: 'success' })
 
   const showToast = (message, severity = 'success') =>
     setToast({ open: true, message, severity })
 
-  // ─── Inativar (soft) ───────────────────────────────────────────
-  const handleInactivate = async () => {
-    const { id, name } = inactivateAthl
-    setPendingId(id)
+  // ─── Toggle Inativar / Reativar ────────────────────────────────────
+  const handleToggle = async () => {
+    const a = toggleAthl
+    const novoIsActive = a.is_active ? 0 : 1
+    const novoStatus   = novoIsActive ? 'active' : 'inactive'
+    setPendingId(a.id)
     try {
-      const res = await fetch(`/api/athletes/${id}`, {
+      const res = await fetch(`/api/athletes/${a.id}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ is_active: 0, status: 'inactive' }),
+        body: JSON.stringify({ is_active: novoIsActive, status: novoStatus }),
       })
-      if (!res.ok) throw new Error('Falha ao inativar')
-      showToast(`"${name}" foi inativado com sucesso`)
+      if (!res.ok) {
+        const json = await res.json().catch(() => ({}))
+        throw new Error(json.error ?? 'Falha ao atualizar status')
+      }
+      showToast(
+        novoIsActive
+          ? `"${a.name}" foi reativado com sucesso`
+          : `"${a.name}" foi inativado com sucesso`,
+        novoIsActive ? 'success' : 'warning'
+      )
       onRefresh()
     } catch (err) {
       showToast(err.message, 'error')
     } finally {
       setPendingId(null)
-      setInactivateAthl(null)
+      setToggleAthl(null)
     }
   }
 
-  // ─── Excluir permanentemente (hard delete) ────────────────────────
+  // ─── Excluir permanentemente (hard delete) ─────────────────────────
   const handleDelete = async ({ backup }) => {
-    const { id, name } = deleteAthl
-    setPendingId(id)
+    const a = deleteAthl
+    setPendingId(a.id)
     try {
-      const url = `/api/athletes/${id}${backup ? '?backup=1' : ''}`
+      const url = `/api/athletes/${a.id}${backup ? '?backup=1' : ''}`
       const res = await fetch(url, { method: 'DELETE' })
       if (!res.ok) {
         const json = await res.json().catch(() => ({}))
@@ -73,8 +84,8 @@ export default function AthleteTable({
       }
       showToast(
         backup
-          ? `"${name}" excluído — backup solicitado (implementação futura)`
-          : `"${name}" foi excluído permanentemente do banco de dados`,
+          ? `"${a.name}" excluído — backup solicitado (implementação futura)`
+          : `"${a.name}" foi excluído permanentemente do banco de dados`,
         backup ? 'warning' : 'success'
       )
       onRefresh()
@@ -124,6 +135,7 @@ export default function AthleteTable({
               {athletes.map(a => {
                 const statusInfo = STATUS_STYLE[a.profile?.status] ?? STATUS_STYLE.active
                 const isBusy     = pendingId === a.id
+                const isActive   = Boolean(a.is_active)
                 return (
                   <tr key={a.id} className='hover:bg-actionHover transition-colors'>
                     <td className='px-5 py-3'>
@@ -184,18 +196,24 @@ export default function AthleteTable({
                               <i className='tabler-edit text-lg' />
                             </button>
 
-                            {/* Inativar */}
-                            <button title='Inativar'
+                            {/* Inativar / Reativar — toggle real */}
+                            <button
+                              title={isActive ? 'Inativar' : 'Reativar'}
                               disabled={isBusy}
-                              onClick={() => setInactivateAthl(a)}
-                              className='rounded-lg p-1.5 text-textSecondary hover:bg-warning/10 hover:text-warning transition-colors disabled:opacity-50'>
+                              onClick={() => setToggleAthl(a)}
+                              className={`rounded-lg p-1.5 transition-colors disabled:opacity-50 ${
+                                isActive
+                                  ? 'text-textSecondary hover:bg-warning/10 hover:text-warning'
+                                  : 'text-success hover:bg-success/10'
+                              }`}>
                               <i className={`text-lg ${
-                                isBusy && inactivateAthl?.id === a.id
-                                  ? 'tabler-loader-2 animate-spin' : 'tabler-user-off'
+                                isBusy && toggleAthl?.id === a.id
+                                  ? 'tabler-loader-2 animate-spin'
+                                  : isActive ? 'tabler-user-off' : 'tabler-user-check'
                               }`} />
                             </button>
 
-                            {/* Excluir — abre diálogo com 3 botões */}
+                            {/* Excluir permanentemente */}
                             <button title='Excluir permanentemente'
                               disabled={isBusy}
                               onClick={() => setDeleteAthl(a)}
@@ -247,22 +265,35 @@ export default function AthleteTable({
         </div>
       </div>
 
-      {/* Diálogo Inativar */}
+      {/* Diálogo Inativar / Reativar */}
       <NodusConfirmDialog
-        open={!!inactivateAthl}
-        title='Inativar atleta'
-        message={`Deseja inativar "${inactivateAthl?.name}"? O atleta perderá acesso mas seus dados serão preservados.`}
-        confirmText='Inativar'
-        color='warning'
-        loading={pendingId === inactivateAthl?.id}
-        onConfirm={handleInactivate}
-        onCancel={() => setInactivateAthl(null)}
+        open={!!toggleAthl}
+        title={toggleAthl?.is_active ? 'Inativar atleta' : 'Reativar atleta'}
+        message={
+          toggleAthl?.is_active
+            ? `Deseja inativar "${toggleAthl?.name}"? O atleta perderá o acesso mas seus dados serão preservados.`
+            : `Deseja reativar "${toggleAthl?.name}"? O atleta voltará a ter acesso ao sistema.`
+        }
+        confirmText={toggleAthl?.is_active ? 'Inativar' : 'Reativar'}
+        color={toggleAthl?.is_active ? 'warning' : 'success'}
+        loading={pendingId === toggleAthl?.id}
+        onConfirm={handleToggle}
+        onCancel={() => setToggleAthl(null)}
       />
 
       {/* Diálogo Excluir (3 botões) */}
-      <NodusDeleteAthleteDialog
+      <NodusDeleteDialog
         open={!!deleteAthl}
-        athlete={deleteAthl}
+        title='Excluir atleta permanentemente'
+        name={deleteAthl?.name}
+        subtitle={deleteAthl?.email}
+        items={[
+          'Dados pessoais e credenciais de acesso',
+          'Ficha esportiva (FC, peso, altura, metas)',
+          'Histórico de sessões de treino',
+          'Logs diários e índices semanais (ACWR)',
+          'Sensores vinculados',
+        ]}
         loading={!!pendingId}
         onDelete={handleDelete}
         onCancel={() => setDeleteAthl(null)}

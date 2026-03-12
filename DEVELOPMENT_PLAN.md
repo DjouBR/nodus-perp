@@ -98,13 +98,22 @@
 - [x] `GET /api/athletes/[id]` — perfil completo (user + profile + sensor + logs + ACWR + sessões)
   - Aceita os 3 roles: `athlete`, `academy_athlete`, `coach_athlete`
 - [x] `PUT /api/athletes/[id]` — atualiza user + profile, recalcula zonas de FC
-- [x] `DELETE /api/athletes/[id]` — soft delete (is_active=0, status=inactive)
+  - `nullifyNum()` aplicado em todos os campos int/float — evita `ER_TRUNCATED_WRONG_VALUE`
+  - Upsert automático: cria `athlete_profiles` se não existir
+- [x] `DELETE /api/athletes/[id]` — **hard delete em cascata**
+  - `session_athletes → daily_logs → weekly_indices → sensors → athlete_profiles → users`
+  - Suporte a `?backup=1` (reservado para Fase 14)
 
 ### Componentes
 - [x] `AthleteStatsBar`, `AthleteFilters`, `AthleteTable` (prop `detailBasePath` + `canManage`)
 - [x] `AthleteAddModal` — 2 passos: dados pessoais + ficha esportiva
+  - Campos obrigatórios com `*` e validação frontend para gênero e data de nascimento
 - [x] `AthleteDetailView` — hero card, zonas FC, ACWR, sensor ANT+, sessões, daily logs
   - Props: `athleteId`, `backPath`, `canEdit` (usa session se omitido)
+- [x] `NodusDeleteDialog` — diálogo genérico com 3 botões: Cancelar / Backup e excluir / Apenas excluir
+- [x] `NodusConfirmDialog` — diálogo de confirmação para Inativar/Reativar (toggle real)
+- [x] `NodusToast` — snackbar MUI para feedback de sucesso/erro/aviso
+- [x] Botão Inativar/Reativar na `AthleteTable` funciona como **toggle real** (`is_active` + `status`)
 
 ### Telas
 - [x] `/athletes` e `/athletes/[id]` — para staff da academia
@@ -119,12 +128,16 @@
 - [x] `POST /api/coaches` — criar coach com perfil profissional
 - [x] `GET /api/coaches/[id]` — perfil completo (user + coach_profile + stats + sessões)
 - [x] `PUT /api/coaches/[id]` — atualiza user + coach_profile (upsert)
-- [x] `DELETE /api/coaches/[id]` — soft delete
+- [x] `DELETE /api/coaches/[id]` — **hard delete + Fase 1 LGPD pending_deletion**
+  - Hard delete imediato: `session_hr_series → session_athletes → training_sessions → coach_profiles → users`
+  - `coach_athlete` vinculados: `is_active=0`, `status='pending_deletion'`, `deletion_scheduled_at = +30 dias`
+  - TODO Fase 2: disparar notificação WhatsApp/email ao aluno + oferta de migração para plano independente
 
 ### Componentes
 - [x] `CoachStatsBar`, `CoachFilters`, `CoachTable`, `CoachAddModal`
 - [x] `CoachDetailView` — hero card, dados pessoais, dados profissionais (CREF, especialidades, bio)
   - Botão Editar visível apenas para `super_admin` e `tenant_admin`
+- [x] `CoachTable` — toggle Inativar/Reativar + `NodusDeleteDialog` (3 botões)
 
 ### Telas
 - [x] `/coaches` — listagem para tenant_admin e super_admin
@@ -141,23 +154,68 @@
 
 ---
 
-## ✅ FASE 4.2 — Hotfixes de CRUD (Concluída — 06-08/03/2026)
+## ✅ FASE 4.2 — Hotfixes de CRUD (Concluída — 06-12/03/2026)
 
 ### Bugs corrigidos
-- [x] `birthdate` ISO → `yyyy-MM-dd` no `ClientDetailView` (SuperAdmin)
-- [x] `birthdate` ISO → `yyyy-MM-dd` no `CoachDetailView`
-- [x] `birthdate` ISO → `yyyy-MM-dd` no `AthleteDetailView`
+- [x] `birthdate` ISO → `yyyy-MM-dd` no `ClientDetailView`, `CoachDetailView`, `AthleteDetailView`
 - [x] Botão Editar Coach visível para qualquer role → agora só `super_admin` e `tenant_admin`
 - [x] Botão Editar Atleta com `(canEdit || true)` hardcoded → corrigido para usar `useSession`
-  - Roles que podem editar atletas: `super_admin`, `tenant_admin`, `coach`, `academy_coach`
+- [x] `birthdate` e `gender` vazios causavam erro 500 MySQL → `nullify()` helper aplicado no POST
+- [x] `isolamento coach_id` no GET `/api/athletes` — coach vê apenas seus `coach_athlete`
+- [x] Campos `int/float` com `''` no PUT `/api/athletes/[id]` causavam `ER_TRUNCATED_WRONG_VALUE`
+  - Resolvido com `nullifyNum()` em todos os campos numéricos do `profileUpdate`
+  - Adicionado upsert no `athlete_profiles`: cria registro se não existir
+- [x] Botão Inativar da `AthleteTable` só inativava, nunca reativava → toggle real implementado
+  - Funciona para `academy_athlete` (via academia) e `coach_athlete` (via coach independente)
 
 ### Melhorias nas datatables
-- [x] `ClientTable` — adicionado botão **Excluir** (`tabler-trash`) com `confirm()` + `DELETE /api/admin/clients/:id`
-  - Separado de Inativar: inativar = `PUT is_active=0`; excluir = `DELETE`
-  - Ícone de Inativar mudado para `text-warning` (antes era `text-error`)
-- [x] `AthleteTable` — adicionado botão **Excluir** (`tabler-trash`) com `confirm()` + `DELETE /api/athletes/:id`
-  - Inativar usa `PUT is_active=0` (não chama DELETE); excluir chama `DELETE`
-- [x] `CoachTable` — já possuía DELETE desde a Fase 4 ✅
+- [x] `confirm()`/`alert()` substituídos por `NodusConfirmDialog` + `NodusToast` (MUI)
+- [x] `NodusDeleteDialog` — componente genérico com 3 botões (Cancelar / Backup / Excluir)
+  - Substitui o antigo `NodusDeleteAthleteDialog` que era específico demais
+  - Usado em `AthleteTable`, `CoachTable` e `ClientTable`
+- [x] `ClientTable` — toggle Inativar/Reativar + `NodusDeleteDialog`
+- [x] `AthleteTable` — toggle Inativar/Reativar + `NodusDeleteDialog`
+- [x] `CoachTable` — toggle Inativar/Reativar + `NodusDeleteDialog`
+- [x] Botão Excluir em todas as 3 tabelas faz **hard delete em cascata** real no banco
+
+---
+
+## 🔲 FASE 4.3 — LGPD: Pending Deletion + Notificações (próximo sprint)
+
+> Fluxo de proteção de dados ao excluir treinador/academia com alunos vinculados.
+> Aprovado em 12/03/2026 — alinhado com LGPD Art. 6º, 7º e 18º.
+
+### Fase 1 ✅ (já implementado em 12/03/2026)
+- [x] Ao excluir coach: sessões e dados operacionais excluídos imediatamente
+- [x] `coach_athlete` vinculados marcados como `pending_deletion` por 30 dias
+  - `users.is_active = 0` (acesso bloqueado)
+  - `athlete_profiles.status = 'pending_deletion'`
+  - `athlete_profiles.deletion_scheduled_at = NOW() + 30 dias`
+- [x] Status `pending_deletion` exibido na `AthleteTable` com badge vermelho
+
+### Fase 2 🔲 (pendente)
+- [ ] **Migration necessária**: adicionar coluna `deletion_scheduled_at DATE` na tabela `athlete_profiles`
+- [ ] **Notificação automática** ao aluno quando marcado como `pending_deletion`:
+  - Canal preferencial: WhatsApp (integração existente no sistema)
+  - Fallback: email
+  - Conteúdo: aviso de 30 dias + link de exportação dos dados + oferta de migração
+- [ ] **Tela de exportação de dados** (`/athlete/export`):
+  - Exportar perfil, histórico de sessões, logs diários e ACWR em JSON/CSV
+  - Disponível mesmo com `is_active=0` (acesso restrito apenas a essa rota)
+- [ ] **Oferta de migração** para plano Atleta Independente:
+  - Role muda de `coach_athlete` → `athlete`
+  - Desvincula `coach_id` do `athlete_profiles`
+  - Inicia fluxo de assinatura independente (Fase 9 — Financeiro)
+- [ ] **Cron job diário** (`/api/cron/cleanup-pending-deletions`):
+  - Verifica `athlete_profiles` onde `status = 'pending_deletion'` e `deletion_scheduled_at <= TODAY`
+  - Executa hard delete em cascata dos alunos expirados
+  - Registra log de conformidade LGPD para cada exclusão
+- [ ] **Mesmo fluxo** para `academy_athlete` ao excluir uma Academia (tenant)
+
+### Fundamentação Legal
+- LGPD Art. 6º — Finalidade: dados coletados para a relação com o treinador; encerrada a relação, base legal some
+- LGPD Art. 7º, I — Consentimento previsto nos Termos de Uso do software
+- LGPD Art. 18º — Direito do titular: portabilidade e eliminação dos dados
 
 ---
 
@@ -282,7 +340,7 @@
 
 - [ ] Evolução do atleta (FC histórica, cargas, ACWR)
 - [ ] Relatórios por academia (frequência, desempenho)
-- [ ] Exportação PDF/CSV
+- [ ] **Exportação PDF/CSV** — inclui fluxo de portabilidade LGPD (Fase 4.3)
 - [ ] Daily Logs — registro subjetivo pós-treino
 
 ---
@@ -332,6 +390,12 @@
   }
   ```
 
+### Nullify — Proteção de Campos MySQL
+- `nullify(v)`: converte `''`, `undefined`, `null` → `null` (campos texto/date)
+- `nullifyNum(v)`: converte `''`, `undefined`, `null` → `null`; converte string numérica → Number (campos `int`/`float`)
+- **Sempre** aplicar nos campos de formulário antes de enviar ao banco
+- Sem essas funções, `''` em coluna `int` causa `ER_TRUNCATED_WRONG_VALUE_FOR_FIELD` no MySQL
+
 ### Padrão de Commits (Conventional Commits)
 
 | Prefixo | Uso | Aparece no Changelog |
@@ -363,9 +427,10 @@
 - Client Components com `params`: usar `use(params)` do React
 - Views de detalhe aceitam props diretas: `athleteId`/`coachId` + `backPath` + `canEdit`
 - Tables aceitam `detailBasePath` para montar a rota do botão "ver perfil" dinamicamente
-- DELETE em usuários = soft delete via API (`is_active=0`); excluir da tabela = chamar `DELETE` HTTP
+- **Inativar** = `PUT is_active=0` (soft); **Excluir** = `DELETE` (hard delete em cascata)
 - Permissões: checar sempre `session.user.role` via `useSession()` — nunca hardcodar `true`
+- Diálogos de confirmação: sempre usar `NodusConfirmDialog` ou `NodusDeleteDialog` — NUNCA `confirm()`/`alert()` nativos
 
 ---
 
-*Última atualização: 08/03/2026*
+*Última atualização: 12/03/2026*
