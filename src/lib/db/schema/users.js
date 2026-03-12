@@ -45,31 +45,44 @@ export const users = mysqlTable('users', {
 // ───────────────────────────────────────────────────────────────────
 // ATHLETE_PROFILES — dados esportivos
 // Vale para: academy_athlete, coach_athlete e athlete
+//
+// status:
+//   active           → padrão
+//   inactive         → inativado manualmente pelo coach/admin
+//   suspended        → suspenso por pendência financeira ou outro motivo
+//   pending_deletion → coach/academia foi excluído; aluno tem 30 dias para exportar dados
+//                      ou migrar para plano Atleta Independente (Fase 4.3 LGPD)
 // ───────────────────────────────────────────────────────────────────
 export const athlete_profiles = mysqlTable('athlete_profiles', {
-  id:                  varchar('id', { length: 36 }).primaryKey(),
-  user_id:             varchar('user_id', { length: 36 }).notNull().unique(),
-  coach_id:            varchar('coach_id', { length: 36 }),            // FK users.id do coach (para coach_athlete)
-  hr_max:              int('hr_max'),
-  hr_rest:             int('hr_rest'),
-  hr_threshold:        int('hr_threshold'),
-  vo2max:              varchar('vo2max', { length: 10 }),
-  weight_kg:           varchar('weight_kg', { length: 8 }),
-  height_cm:           varchar('height_cm', { length: 8 }),
-  body_fat_pct:        varchar('body_fat_pct', { length: 8 }),
-  goal:                text('goal'),
-  medical_notes:       text('medical_notes'),
-  emergency_contact:   varchar('emergency_contact', { length: 100 }),
-  emergency_phone:     varchar('emergency_phone', { length: 20 }),
-  zone1_max:           int('zone1_max'),
-  zone2_max:           int('zone2_max'),
-  zone3_max:           int('zone3_max'),
-  zone4_max:           int('zone4_max'),
-  plan_id:             varchar('plan_id', { length: 36 }),
-  enrollment_date:     date('enrollment_date'),
-  status:              mysqlEnum('status', ['active', 'inactive', 'suspended']).notNull().default('active'),
-  created_at:          timestamp('created_at').defaultNow(),
-  updated_at:          timestamp('updated_at').defaultNow().onUpdateNow(),
+  id:                      varchar('id', { length: 36 }).primaryKey(),
+  user_id:                 varchar('user_id', { length: 36 }).notNull().unique(),
+  coach_id:                varchar('coach_id', { length: 36 }),            // FK users.id do coach (para coach_athlete)
+  hr_max:                  int('hr_max'),
+  hr_rest:                 int('hr_rest'),
+  hr_threshold:            int('hr_threshold'),
+  vo2max:                  varchar('vo2max', { length: 10 }),
+  weight_kg:               varchar('weight_kg', { length: 8 }),
+  height_cm:               varchar('height_cm', { length: 8 }),
+  body_fat_pct:            varchar('body_fat_pct', { length: 8 }),
+  goal:                    text('goal'),
+  medical_notes:           text('medical_notes'),
+  emergency_contact:       varchar('emergency_contact', { length: 100 }),
+  emergency_phone:         varchar('emergency_phone', { length: 20 }),
+  zone1_max:               int('zone1_max'),
+  zone2_max:               int('zone2_max'),
+  zone3_max:               int('zone3_max'),
+  zone4_max:               int('zone4_max'),
+  plan_id:                 varchar('plan_id', { length: 36 }),
+  enrollment_date:         date('enrollment_date'),
+  status:                  mysqlEnum('status', [
+                             'active',
+                             'inactive',
+                             'suspended',
+                             'pending_deletion',  // Fase 4.3 LGPD — exclusão agendada
+                           ]).notNull().default('active'),
+  deletion_scheduled_at:   date('deletion_scheduled_at'),               // Fase 4.3 LGPD — data do hard delete automático
+  created_at:              timestamp('created_at').defaultNow(),
+  updated_at:              timestamp('updated_at').defaultNow().onUpdateNow(),
 })
 
 // ───────────────────────────────────────────────────────────────────
