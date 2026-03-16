@@ -3,58 +3,47 @@
 import Card from '@mui/material/Card'
 import CardHeader from '@mui/material/CardHeader'
 import CardContent from '@mui/material/CardContent'
-import List from '@mui/material/List'
-import ListItem from '@mui/material/ListItem'
-import ListItemAvatar from '@mui/material/ListItemAvatar'
-import ListItemText from '@mui/material/ListItemText'
-import Avatar from '@mui/material/Avatar'
 import Typography from '@mui/material/Typography'
 import LinearProgress from '@mui/material/LinearProgress'
-import Button from '@mui/material/Button'
-import Link from 'next/link'
+import CustomAvatar from '@core/components/mui/Avatar'
+import OptionMenu from '@core/components/option-menu'
 
-const zoneColors = ['#a8d8ea','#4caf50','#ff9800','#f44336','#9c27b0']
-
-const TopAthletesCard = ({ athletes = [] }) => {
-  const maxCalories = Math.max(...athletes.map(a => a.calories), 1)
-
-  return (
-    <Card className='h-full'>
-      <CardHeader
-        title='Top Atletas do Mês'
-        subheader='Por calorias queimadas'
-        action={<Button size='small' component={Link} href='/athletes'>Ver todos</Button>}
-        avatar={<i className='tabler-trophy text-warning text-2xl' />}
-      />
-      <CardContent className='pt-0'>
-        <List disablePadding>
-          {athletes.map((a, i) => (
-            <ListItem key={i} className='px-0 flex flex-col items-start gap-1'>
-              <div className='flex items-center gap-3 w-full'>
-                <Avatar sx={{ width: 36, height: 36, bgcolor: zoneColors[a.zone - 1], fontSize: 13, fontWeight: 700 }}>
-                  {a.avatar}
-                </Avatar>
-                <div className='flex-1'>
-                  <div className='flex justify-between items-center'>
-                    <Typography variant='body2' className='font-semibold'>{a.name}</Typography>
-                    <Typography variant='caption' className='font-bold' color='textSecondary'>
-                      {a.calories.toLocaleString('pt-BR')} kcal
-                    </Typography>
-                  </div>
-                  <LinearProgress
-                    variant='determinate'
-                    value={(a.calories / maxCalories) * 100}
-                    sx={{ height: 6, borderRadius: 3, mt: 0.5,
-                      '& .MuiLinearProgress-bar': { bgcolor: zoneColors[a.zone - 1] } }}
-                  />
-                </div>
+/**
+ * TopAthletesCard
+ * Props: athletes = [{ name, avatar, calories, sessions, zone }]
+ */
+const TopAthletesCard = ({ athletes = [] }) => (
+  <Card className='h-full'>
+    <CardHeader
+      title='Top Atletas'
+      subheader='Por calorias no mês'
+      action={<OptionMenu options={['Por Sessões', 'Por Calorias', 'Por Zona Média']} />}
+    />
+    <CardContent className='flex flex-col gap-5'>
+      {athletes.map((a, i) => {
+        const pct = Math.min(Math.round((a.calories / 4000) * 100), 100)
+        return (
+          <div key={i} className='flex items-center gap-3'>
+            <CustomAvatar skin='light' color='primary' variant='rounded' size={34}>
+              <Typography variant='caption' className='font-bold'>{a.avatar}</Typography>
+            </CustomAvatar>
+            <div className='flex flex-col flex-1 gap-1'>
+              <div className='flex items-center justify-between'>
+                <Typography variant='body2' className='font-medium'>{a.name}</Typography>
+                <Typography variant='caption' color='text.disabled'>{a.calories.toLocaleString('pt-BR')} kcal</Typography>
               </div>
-            </ListItem>
-          ))}
-        </List>
-      </CardContent>
-    </Card>
-  )
-}
+              <LinearProgress
+                value={pct}
+                variant='determinate'
+                color='primary'
+                sx={{ height: 6, borderRadius: 3 }}
+              />
+            </div>
+          </div>
+        )
+      })}
+    </CardContent>
+  </Card>
+)
 
 export default TopAthletesCard
