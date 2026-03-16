@@ -15,7 +15,7 @@ const themeConfig = {
     detached: true,
     blur: true
   },
-  contentWidth: 'compact',
+  contentWidth: 'wide',
   footer: {
     type: 'static',
     contentWidth: 'compact',

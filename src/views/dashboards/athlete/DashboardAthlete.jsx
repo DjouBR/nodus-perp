@@ -15,23 +15,23 @@ import ACWRCard from '@views/dashboards/components/ACWRCard'
 
 // ── Dados simulados — substituir por fetch da API (Fase 5 real) ─────────────
 const stats = [
-  { title: 'Sessões no Mês',  value: '14',   icon: 'tabler-activity', color: 'primary', trend: 'meta: 20'         },
-  { title: 'Calorias no Mês', value: '12.4k',icon: 'tabler-flame',    color: 'error',   trend: 'kcal queimadas'   },
-  { title: 'Streak Atual',    value: '6',    icon: 'tabler-bolt',     color: 'warning', trend: 'dias seguidos'    },
-  { title: 'Ranking',         value: '#4',   icon: 'tabler-trophy',   color: 'success', trend: 'na academia'      },
+  { title: 'Sessões no Mês',  value: '14',   icon: 'tabler-activity', color: 'primary', trend: 'meta: 20'       },
+  { title: 'Calorias no Mês', value: '12.4k',icon: 'tabler-flame',    color: 'error',   trend: 'kcal queimadas' },
+  { title: 'Streak Atual',    value: '6',    icon: 'tabler-bolt',     color: 'warning', trend: 'dias seguidos'  },
+  { title: 'Ranking',         value: '#4',   icon: 'tabler-trophy',   color: 'success', trend: 'na academia'    },
 ]
 
 const DashboardAthlete = () => (
   <Grid container spacing={6}>
     {/* ── Linha 1: 4 StatCards ── */}
     {stats.map(s => (
-      <Grid key={s.title} item xs={12} sm={6} xl={3}>
+      <Grid key={s.title} size={{ xs: 12, sm: 6, xl: 3 }}>
         <StatCard {...s} />
       </Grid>
     ))}
 
     {/* ── Linha 2: Próxima sessão (8) + ACWR (4) ── */}
-    <Grid item xs={12} md={8}>
+    <Grid size={{ xs: 12, md: 8 }}>
       <Card>
         <CardHeader
           title='Próxima Sessão'
@@ -59,12 +59,12 @@ const DashboardAthlete = () => (
       </Card>
     </Grid>
 
-    <Grid item xs={12} md={4}>
+    <Grid size={{ xs: 12, md: 4 }}>
       <ACWRCard acwr={1.12} label='meu ACWR' />
     </Grid>
 
     {/* ── Linha 3: Meu Progresso (full width) ── */}
-    <Grid item xs={12}>
+    <Grid size={{ xs: 12 }}>
       <Card>
         <CardHeader
           title='Meu Progresso'
@@ -77,7 +77,7 @@ const DashboardAthlete = () => (
               { label: 'Meta de calorias',value: 62, max: 100, color: 'error'   },
               { label: 'Consistência',    value: 70, max: 100, color: 'success' },
             ].map(p => (
-              <Grid key={p.label} item xs={12} md={4}>
+              <Grid key={p.label} size={{ xs: 12, md: 4 }}>
                 <div className='flex flex-col gap-2'>
                   <div className='flex justify-between'>
                     <Typography variant='body2'>{p.label}</Typography>

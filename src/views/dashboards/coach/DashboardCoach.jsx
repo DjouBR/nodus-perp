@@ -10,8 +10,8 @@ import TopAthletesCard   from '@views/dashboards/components/TopAthletesCard'
 
 // ── Dados simulados — substituir por fetch da API (Fase 5 real) ─────────────
 const stats = [
-  { title: 'Atletas Ativos',  value: '24',   icon: 'tabler-users',             color: 'primary', trend: '3 turmas'     },
-  { title: 'Sessões Hoje',    value: '3',    icon: 'tabler-activity',           color: 'success', trend: '1 em andamento' },
+  { title: 'Atletas Ativos',  value: '24',   icon: 'tabler-users',             color: 'primary', trend: '3 turmas'        },
+  { title: 'Sessões Hoje',    value: '3',    icon: 'tabler-activity',           color: 'success', trend: '1 em andamento'  },
   { title: 'FC Média Grupo',  value: '138',  icon: 'tabler-heart-rate-monitor', color: 'error',   trend: 'bpm — zona 3'   },
   { title: 'ACWR Médio',      value: '1.12', icon: 'tabler-chart-line',         color: 'warning', trend: 'dentro do ideal' },
 ]
@@ -37,24 +37,24 @@ const DashboardCoach = () => (
   <Grid container spacing={6}>
     {/* ── Linha 1: 4 StatCards ── */}
     {stats.map(s => (
-      <Grid key={s.title} item xs={12} sm={6} xl={3}>
+      <Grid key={s.title} size={{ xs: 12, sm: 6, xl: 3 }}>
         <StatCard {...s} />
       </Grid>
     ))}
 
     {/* ── Linha 2: Sessões (8) + ACWR radial (4) ── */}
-    <Grid item xs={12} md={8}>
+    <Grid size={{ xs: 12, md: 8 }}>
       <SessionsTableCard sessions={sessions} />
     </Grid>
-    <Grid item xs={12} md={4}>
+    <Grid size={{ xs: 12, md: 4 }}>
       <ACWRCard acwr={1.12} label='do grupo' />
     </Grid>
 
     {/* ── Linha 3: Alertas (7) + Top Atletas (5) ── */}
-    <Grid item xs={12} md={7}>
+    <Grid size={{ xs: 12, md: 7 }}>
       <AlertsCard alerts={alerts} />
     </Grid>
-    <Grid item xs={12} md={5}>
+    <Grid size={{ xs: 12, md: 5 }}>
       <TopAthletesCard athletes={topAthletes} />
     </Grid>
   </Grid>
