@@ -5,65 +5,57 @@ import CardHeader from '@mui/material/CardHeader'
 import CardContent from '@mui/material/CardContent'
 import List from '@mui/material/List'
 import ListItem from '@mui/material/ListItem'
-import ListItemAvatar from '@mui/material/ListItemAvatar'
 import ListItemText from '@mui/material/ListItemText'
-import Avatar from '@mui/material/Avatar'
 import Chip from '@mui/material/Chip'
 import Typography from '@mui/material/Typography'
+import Skeleton from '@mui/material/Skeleton'
+import OptionMenu from '@core/components/option-menu'
 
-const severityConfig = {
-  error:   { color: 'error',   icon: 'tabler-alert-triangle',  label: 'Crítico'  },
-  warning: { color: 'warning', icon: 'tabler-alert-circle',    label: 'Atenção'  },
-  info:    { color: 'info',    icon: 'tabler-info-circle',     label: 'Info'     },
-  success: { color: 'success', icon: 'tabler-circle-check',    label: 'OK'       },
-}
+// ── Empty state ──────────────────────────────────────────────────────
+const EmptyAlerts = () => (
+  <div className='flex flex-col items-center justify-center py-8 gap-2 text-center'>
+    <i className='tabler-circle-check text-4xl text-success opacity-60' />
+    <Typography variant='body1' className='font-semibold'>Tudo em ordem!</Typography>
+    <Typography variant='body2' color='textSecondary'>Nenhum alerta de FC ou carga no momento.</Typography>
+  </div>
+)
 
-const AlertsCard = ({ alerts = [] }) => {
-  return (
-    <Card className='h-full'>
-      <CardHeader
-        title='Alertas em Tempo Real'
-        subheader={`${alerts.length} alerta${alerts.length !== 1 ? 's' : ''} ativo${alerts.length !== 1 ? 's' : ''}`}
-        avatar={<i className='tabler-bell-ringing text-error text-2xl' />}
-      />
-      <CardContent className='pt-0'>
-        {alerts.length === 0 ? (
-          <div className='flex flex-col items-center gap-2 py-6'>
-            <i className='tabler-circle-check text-success text-5xl' />
-            <Typography color='textSecondary'>Nenhum alerta ativo</Typography>
-          </div>
-        ) : (
-          <List disablePadding>
-            {alerts.map((alert, i) => {
-              const cfg = severityConfig[alert.severity] ?? severityConfig.info
-              return (
-                <ListItem key={i} divider={i < alerts.length - 1} className='px-0'>
-                  <ListItemAvatar>
-                    <Avatar sx={{ bgcolor: `var(--mui-palette-${cfg.color}-lightOpacity)` }}>
-                      <i className={`${cfg.icon} text-xl`}
-                        style={{ color: `var(--mui-palette-${cfg.color}-main)` }} />
-                    </Avatar>
-                  </ListItemAvatar>
-                  <ListItemText
-                    primary={
-                      <div className='flex items-center gap-2'>
-                        <Typography variant='body2' className='font-semibold'>{alert.athlete}</Typography>
-                        <Chip label={cfg.label} color={cfg.color} size='small' />
-                      </div>
-                    }
-                    secondary={alert.message}
-                  />
-                  <Typography variant='caption' color='textSecondary' className='whitespace-nowrap ml-2'>
-                    {alert.time}
-                  </Typography>
-                </ListItem>
-              )
-            })}
-          </List>
-        )}
-      </CardContent>
-    </Card>
-  )
-}
+const severityColor = { error: 'error', warning: 'warning', info: 'info', success: 'success' }
+const severityLabel = { error: 'Crítico', warning: 'Atenção', info: 'Info', success: 'OK' }
+
+const AlertsCard = ({ alerts = [], loading = false }) => (
+  <Card className='h-full'>
+    <CardHeader
+      title='Alertas'
+      avatar={<i className='tabler-bell text-warning text-2xl' />}
+      action={<OptionMenu options={['Esta semana', 'Este mês', 'Últimos 3 meses']} />}
+    />
+    <CardContent>
+      {loading ? (
+        [1,2,3].map(i => <Skeleton key={i} variant='rounded' height={48} className='mb-2' />)
+      ) : alerts.length === 0 ? (
+        <EmptyAlerts />
+      ) : (
+        <List disablePadding>
+          {alerts.map((a, i) => (
+            <ListItem key={i} disablePadding className='mb-2 gap-3'>
+              <Chip
+                label={severityLabel[a.severity] || a.severity}
+                color={severityColor[a.severity] || 'default'}
+                size='small'
+                variant='tonal'
+                className='min-w-[64px]'
+              />
+              <ListItemText
+                primary={<Typography variant='body2' className='font-semibold'>{a.athlete}</Typography>}
+                secondary={<Typography variant='caption' color='textSecondary'>{a.message} · {a.time}</Typography>}
+              />
+            </ListItem>
+          ))}
+        </List>
+      )}
+    </CardContent>
+  </Card>
+)
 
 export default AlertsCard

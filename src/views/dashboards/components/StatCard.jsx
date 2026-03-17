@@ -1,68 +1,59 @@
 'use client'
 
-// MUI Imports
 import Card from '@mui/material/Card'
 import CardContent from '@mui/material/CardContent'
 import Typography from '@mui/material/Typography'
 import Chip from '@mui/material/Chip'
+import Skeleton from '@mui/material/Skeleton'
 import CustomAvatar from '@core/components/mui/Avatar'
 
-// colorMap → usa CSS vars do MUI palette
-const colorMap = {
-  primary: 'primary',
-  success: 'success',
-  error:   'error',
-  warning: 'warning',
-  info:    'info',
-}
-
 /**
- * StatCard — padrão template_novo
- *
+ * StatCard — card de métrica principal
  * Props:
- *   title   string  — legenda acima do valor
- *   value   string  — número/valor principal (grande)
- *   icon    string  — classe tabler (ex: 'tabler-users')
- *   color   string  — primary | success | error | warning | info
- *   trend   string  — texto do chip lateral (opcional)
- *   trendUp boolean — chip verde se true, vermelho se false, cinza se undefined
+ *   title    : string
+ *   value    : string | number   (valor principal)
+ *   icon     : string            (classe tabler)
+ *   color    : 'primary'|'success'|'error'|'warning'|'info'
+ *   trend    : string            (texto do chip)
+ *   trendUp  : true → chip verde | false → chip vermelho | undefined → chip cinza
+ *   loading  : boolean           (exibe skeleton)
  */
-const StatCard = ({ title, value, icon, color = 'primary', trend, trendUp }) => {
-  const c = colorMap[color] ?? 'primary'
-
-  const chipColor = trendUp === true ? 'success' : trendUp === false ? 'error' : 'default'
-
-  return (
-    <Card className='h-full'>
-      <CardContent className='flex items-start justify-between gap-3 p-5'>
-        {/* Ícone */}
-        <CustomAvatar skin='light' color={c} variant='rounded' size={42}>
-          <i className={`${icon} text-[22px]`} />
+const StatCard = ({ title, value, icon, color = 'primary', trend, trendUp, loading = false }) => (
+  <Card>
+    <CardContent className='flex flex-col gap-3'>
+      <div className='flex items-center justify-between'>
+        <Typography variant='body2' color='textSecondary'>{title}</Typography>
+        <CustomAvatar skin='light' color={color} size={42} className='rounded-md'>
+          <i className={`${icon} text-xl`} />
         </CustomAvatar>
+      </div>
 
-        {/* Valor + título */}
-        <div className='flex flex-col items-end flex-1'>
-          <div className='flex items-center gap-2 flex-wrap justify-end'>
-            <Typography variant='h4' className='font-bold leading-tight'>
-              {value}
-            </Typography>
-            {trend && (
-              <Chip
-                size='small'
-                variant='tonal'
-                color={chipColor}
-                label={trend}
-                className='text-xs font-medium'
-              />
-            )}
-          </div>
-          <Typography variant='body2' color='text.secondary' className='text-right'>
-            {title}
+      {loading ? (
+        <>
+          <Skeleton variant='text' width={80} height={40} />
+          <Skeleton variant='rounded' width={100} height={24} />
+        </>
+      ) : (
+        <>
+          <Typography variant='h4' className='font-bold'>
+            {value ?? '—'}
           </Typography>
-        </div>
-      </CardContent>
-    </Card>
-  )
-}
+          {trend && (
+            <Chip
+              label={trend}
+              size='small'
+              variant='tonal'
+              color={
+                trendUp === true  ? 'success' :
+                trendUp === false ? 'error'   : 'default'
+              }
+              className='w-fit'
+            />
+          )}
+        </>
+      )}
+    </CardContent>
+  </Card>
+)
 
 export default StatCard
