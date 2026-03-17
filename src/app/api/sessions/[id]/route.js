@@ -1,14 +1,14 @@
 import { NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
-import { authOptions } from '@/app/api/auth/[...nextauth]/route'
-import { db } from '@/lib/db'
+import { authOptions } from '@/libs/auth'
+import { db } from '@/lib/db/index.js'
 import { training_sessions } from '@/lib/db/schema/sessions'
 import { eq, and } from 'drizzle-orm'
 
 // GET /api/sessions/[id]
 export async function GET(req, { params }) {
   const session = await getServerSession(authOptions)
-  if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  if (!session) return NextResponse.json({ error: 'Não autorizado' }, { status: 401 })
 
   const { id } = await params
 
@@ -19,7 +19,7 @@ export async function GET(req, { params }) {
       .where(
         and(
           eq(training_sessions.id, id),
-          eq(training_sessions.tenant_id, session.user.tenantId)
+          eq(training_sessions.tenant_id, session.user.tenant_id)
         )
       )
 
@@ -34,30 +34,29 @@ export async function GET(req, { params }) {
 // PUT /api/sessions/[id]
 export async function PUT(req, { params }) {
   const session = await getServerSession(authOptions)
-  if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  if (!session) return NextResponse.json({ error: 'Não autorizado' }, { status: 401 })
 
   const role = session.user.role
   if (!['tenant_admin', 'academy_coach'].includes(role)) {
-    return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+    return NextResponse.json({ error: 'Acesso negado' }, { status: 403 })
   }
 
   const { id } = await params
   const body = await req.json()
   const { name, session_type_id, coach_id, start_datetime, duration_min, capacity, target_zone_min, target_zone_max, notes, status } = body
 
-  // Verifica posse se for coach
   if (role === 'academy_coach') {
     const [existing] = await db
       .select({ coach_id: training_sessions.coach_id })
       .from(training_sessions)
       .where(eq(training_sessions.id, id))
     if (!existing || existing.coach_id !== session.user.id) {
-      return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+      return NextResponse.json({ error: 'Acesso negado' }, { status: 403 })
     }
   }
 
   const start = new Date(start_datetime)
-  const end = new Date(start.getTime() + (duration_min || 60) * 60 * 1000)
+  const end   = new Date(start.getTime() + (duration_min || 60) * 60 * 1000)
 
   try {
     await db
@@ -78,7 +77,7 @@ export async function PUT(req, { params }) {
       .where(
         and(
           eq(training_sessions.id, id),
-          eq(training_sessions.tenant_id, session.user.tenantId)
+          eq(training_sessions.tenant_id, session.user.tenant_id)
         )
       )
 
@@ -89,14 +88,14 @@ export async function PUT(req, { params }) {
   }
 }
 
-// DELETE /api/sessions/[id] — na prática faz soft-delete (status = cancelled)
+// DELETE /api/sessions/[id] — soft-delete (status = cancelled)
 export async function DELETE(req, { params }) {
   const session = await getServerSession(authOptions)
-  if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  if (!session) return NextResponse.json({ error: 'Não autorizado' }, { status: 401 })
 
   const role = session.user.role
   if (!['tenant_admin', 'academy_coach'].includes(role)) {
-    return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+    return NextResponse.json({ error: 'Acesso negado' }, { status: 403 })
   }
 
   const { id } = await params
@@ -107,7 +106,7 @@ export async function DELETE(req, { params }) {
       .from(training_sessions)
       .where(eq(training_sessions.id, id))
     if (!existing || existing.coach_id !== session.user.id) {
-      return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+      return NextResponse.json({ error: 'Acesso negado' }, { status: 403 })
     }
   }
 
@@ -118,7 +117,7 @@ export async function DELETE(req, { params }) {
       .where(
         and(
           eq(training_sessions.id, id),
-          eq(training_sessions.tenant_id, session.user.tenantId)
+          eq(training_sessions.tenant_id, session.user.tenant_id)
         )
       )
 
