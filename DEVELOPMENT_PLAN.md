@@ -14,6 +14,7 @@
 | Banco de Dados | MySQL + Drizzle ORM |
 | Autenticação | NextAuth.js v4 (JWT + OAuth) |
 | Estilo | Tailwind CSS v4 + MUI |
+| Gráficos | ApexCharts (react-apexcharts) |
 | Hardware | ANT+ USB via WebSocket |
 | Changelog | release-it + @release-it/conventional-changelog |
 | Deploy | (a definir) |
@@ -180,7 +181,7 @@
 
 ---
 
-## 🔲 FASE 4.3 — LGPD: Pending Deletion + Notificações (próximo sprint)
+## 🔲 FASE 4.3 — LGPD: Pending Deletion + Notificações (pendente)
 
 > Fluxo de proteção de dados ao excluir treinador/academia com alunos vinculados.
 > Aprovado em 12/03/2026 — alinhado com LGPD Art. 6º, 7º e 18º.
@@ -195,42 +196,84 @@
 
 ### Fase 2 🔲 (pendente)
 - [ ] **Migration necessária**: adicionar coluna `deletion_scheduled_at DATE` na tabela `athlete_profiles`
-- [ ] **Notificação automática** ao aluno quando marcado como `pending_deletion`:
-  - Canal preferencial: WhatsApp (integração existente no sistema)
-  - Fallback: email
-  - Conteúdo: aviso de 30 dias + link de exportação dos dados + oferta de migração
-- [ ] **Tela de exportação de dados** (`/athlete/export`):
-  - Exportar perfil, histórico de sessões, logs diários e ACWR em JSON/CSV
-  - Disponível mesmo com `is_active=0` (acesso restrito apenas a essa rota)
-- [ ] **Oferta de migração** para plano Atleta Independente:
-  - Role muda de `coach_athlete` → `athlete`
-  - Desvincula `coach_id` do `athlete_profiles`
-  - Inicia fluxo de assinatura independente (Fase 9 — Financeiro)
-- [ ] **Cron job diário** (`/api/cron/cleanup-pending-deletions`):
-  - Verifica `athlete_profiles` onde `status = 'pending_deletion'` e `deletion_scheduled_at <= TODAY`
-  - Executa hard delete em cascata dos alunos expirados
-  - Registra log de conformidade LGPD para cada exclusão
+- [ ] **Notificação automática** ao aluno quando marcado como `pending_deletion`
+- [ ] **Tela de exportação de dados** (`/athlete/export`)
+- [ ] **Oferta de migração** para plano Atleta Independente
+- [ ] **Cron job diário** (`/api/cron/cleanup-pending-deletions`)
 - [ ] **Mesmo fluxo** para `academy_athlete` ao excluir uma Academia (tenant)
 
-### Fundamentação Legal
-- LGPD Art. 6º — Finalidade: dados coletados para a relação com o treinador; encerrada a relação, base legal some
-- LGPD Art. 7º, I — Consentimento previsto nos Termos de Uso do software
-- LGPD Art. 18º — Direito do titular: portabilidade e eliminação dos dados
+---
+
+## ✅ FASE 5 — Dashboards por Role (Concluída — 16/03/2026)
+
+> Dashboards MVP com visual idêntico ao template_novo (Vuexy), dados simulados prontos para
+> substituição por fetch real da API na Fase 5.1 real (dados reais).
+
+### Infraestrutura de Gráficos
+- [x] `react-apexcharts` + `apexcharts` adicionados como dependência
+  - **Instalar localmente:** `npm install react-apexcharts apexcharts`
+- [x] `src/libs/ApexCharts.jsx` — wrapper com `dynamic import` (SSR desativado)
+- [x] `src/libs/styles/AppReactApexCharts.jsx` — wrapper estilizado com CSS vars do MUI palette
+  - Tooltips, fontes e cores seguem o tema MUI automaticamente
+
+### Correções de Layout
+- [x] `themeConfig.js` — `contentWidth: 'compact'` → `'wide'`
+  - Remove o `max-inline-size` que encolhia o conteúdo e desalinhava da navbar
+- [x] Migração MUI Grid v5 → v7 nos 3 dashboards
+  - `<Grid item xs={12} md={6}>` → `<Grid size={{ xs: 12, md: 6 }}>`
+  - A prop `item` foi removida no MUI v7 — sem ela os breakpoints eram ignorados
+
+### Padrão Visual (idêntico ao template_novo)
+- [x] `StatCard` v2 — `CustomAvatar` rounded + valor grande + `<Chip variant='tonal'>` de trend
+  - `trendUp=true` → chip verde | `trendUp=false` → chip vermelho | `undefined` → chip cinza
+- [x] `OptionMenu` (`@core/components/option-menu`) em todos os cards com seletor de período
+- [x] Títulos/saudações de página removidos — conteúdo começa direto nos cards
+
+### Componentes Novos
+- [x] `HRZonesDonutCard` — donut ApexCharts com legenda + rótulo central + OptionMenu
+- [x] `WeeklyPresenceCard` — bar chart ApexCharts com grid pontilhado + tooltip + OptionMenu
+- [x] `ACWRCard` — radialBar ApexCharts semicircular (cor muda: verde/amarelo/vermelho pelo valor) + legenda de zonas
+- [x] `TopAthletesCard` v2 — CustomAvatar + LinearProgress por atleta + OptionMenu (ordenação)
+
+### Dashboards Entregues
+- [x] `DashboardAcademia` (`tenant_admin`) — 4 StatCards + Alertas + HRZonesDonut + SessionsTable + TopAthletes + WeeklyPresence
+- [x] `DashboardCoach` (`coach` / `academy_coach`) — 4 StatCards + SessionsTable + ACWRCard + Alertas + TopAthletes
+- [x] `DashboardAthlete` (`athlete` / `academy_athlete` / `coach_athlete`) — 4 StatCards + Próxima Sessão + ACWRCard + Meu Progresso (3 barras)
+
+### Pendente nesta fase
+- [ ] Substituir dados simulados por fetch real da API (ver Fase 5.1 abaixo)
+- [ ] `DashboardReception` — a definir escopo
+- [ ] `DashboardSuperAdmin` — métricas SaaS (tenants, MRR, alertas)
 
 ---
 
-## 🔲 FASE 5 — Dashboards por Role *(próximo passo)*
+## 🔲 FASE 5.1 — Dados Reais nos Dashboards (próximo passo)
 
-- [ ] `/home` `super_admin` — métricas SaaS (tenants ativos, MRR, alertas)
-- [ ] `/home` `tenant_admin` — atletas ativos, sessões do dia, receita do mês
-- [ ] `/home` `coach` — alunos do dia, próximas sessões, alertas de FC
-- [ ] `/home` `academy_coach` — igual ao coach (sem financeiro)
-- [ ] `/home` `receptionist` — check-ins do dia, atletas presentes
-- [ ] `/home` `academy_athlete` / `coach_athlete` / `athlete` — próximo treino, FC última sessão, evolução
+> Substituir os dados `const` simulados por fetch da API real em cada dashboard.
+
+- [ ] `GET /api/dashboard/academia` — atletas ativos, sessões do dia, FC média, calorias, alertas, zonas, presença semanal, top atletas
+- [ ] `GET /api/dashboard/coach` — alunos do coach, sessões do dia, FC média do grupo, ACWR médio, alertas, top atletas
+- [ ] `GET /api/dashboard/athlete` — sessões no mês, calorias, streak, ranking, próxima sessão, ACWR, progresso
+- [ ] Conectar `DashboardAcademia`, `DashboardCoach`, `DashboardAthlete` às APIs reais
 
 ---
 
-## 🔲 FASE 5.1 — Upload de Avatar (pendente)
+## 🔲 FASE 5.2 — Dashboard Customizável pelo Usuário (futuro)
+
+> Decisão tomada em 17/03/2026: **deixar para depois**, após a Fase 7 (Monitoramento Real).
+> Faz mais sentido customizar quando os cards tiverem dados reais e o usuário souber o que quer ver.
+
+### Escopo planejado
+- [ ] Banco: tabela `dashboard_preferences` — `user_id`, `role`, `layout_json` (cards visíveis + ordem + tamanho)
+- [ ] API: `GET/PUT /api/dashboard/preferences`
+- [ ] Componente `DashboardEditor` — modo de edição com drag-and-drop (ex: `dnd-kit`)
+- [ ] Botão "Personalizar Dashboard" na navbar ou no canto do dashboard
+- [ ] Cards disponíveis por role (ex: atleta não vê cards financeiros)
+- [ ] Reset para layout padrão
+
+---
+
+## 🔲 FASE 5.1 Upload de Avatar (pendente)
 
 > O campo `avatar_url varchar(255)` já existe no schema `users`.
 
@@ -431,6 +474,13 @@
 - Permissões: checar sempre `session.user.role` via `useSession()` — nunca hardcodar `true`
 - Diálogos de confirmação: sempre usar `NodusConfirmDialog` ou `NodusDeleteDialog` — NUNCA `confirm()`/`alert()` nativos
 
+### Padrões de Dashboard
+- Grid: sempre `<Grid size={{ xs: 12, md: 6 }}>` — API MUI v7 (não usar `item xs={}`)
+- Gráficos: sempre via `AppReactApexCharts` com `dynamic import` (SSR: false)
+- StatCards: usar `<StatCard>` com `CustomAvatar` rounded + `<Chip variant='tonal'>` para trend
+- Layout: `contentWidth: 'wide'` no themeConfig — nunca `'compact'` (quebra o Grid)
+- Dados simulados: marcados com comentário `// substituir por fetch da API (Fase 5.1 real)`
+
 ---
 
-*Última atualização: 12/03/2026*
+*Última atualização: 17/03/2026*
