@@ -3,6 +3,26 @@
 Todas as mudancas relevantes do projeto sao documentadas aqui.
 
 
+## [0.4.0](https://github.com/DjouBR/nodus-perp/compare/v0.3.0...v0.4.0) (2026-03-17)
+
+### Novas Funcionalidades
+
+* dashboards MVP — ApexCharts, layout full-width, StatCard v2, OptionMenu, sem títulos de página ([b07f2e7](https://github.com/DjouBR/nodus-perp/commit/b07f2e7833a706e216c9b0c72025d362083b7b3c))
+* pending_deletion 30 dias ao excluir coach + fix PUT atleta nullify + fix toggle inativar/reativar ([3be102f](https://github.com/DjouBR/nodus-perp/commit/3be102f1a86d6f333515e94d28184e6d269b40ad))
+
+### Correcoes de Bugs
+
+* corrige bugs críticos de CRUD - birthdate/gender null, isolamento coach_id, dialogs MUI, botões CoachTable, senha no modal cliente, campos obrigatórios, rota 404 coach_athlete ([0824051](https://github.com/DjouBR/nodus-perp/commit/0824051970240852f80a0e8d5464d29ded13a90c))
+* DELETE atleta faz hard delete em cascata + diálogo 3 botões (backup/excluir/cancelar) ([9e92485](https://github.com/DjouBR/nodus-perp/commit/9e924852cc3e3e7f6bae05d08418e1cb0c839e32))
+* DELETE nas datatables (Client, Athlete) + corrige canEdit no AthleteDetailView + atualiza DEVELOPMENT_PLAN ([1555095](https://github.com/DjouBR/nodus-perp/commit/15550950bc06f9be494b3e082e5f4f63ed3bee0a))
+* hard delete em cascata para coaches e admin/clients + NodusDeleteDialog genérico ([4e4da00](https://github.com/DjouBR/nodus-perp/commit/4e4da00de7f97fa90aebb9984fe491dcae876258))
+* layout full-width — contentWidth wide + Grid v7 size API nos 3 dashboards ([7a45623](https://github.com/DjouBR/nodus-perp/commit/7a45623b8165c60f781059ca47b5f72642afb2df))
+* schema athlete_profiles — pending_deletion no enum status + coluna deletion_scheduled_at ([438929e](https://github.com/DjouBR/nodus-perp/commit/438929ea27a8d9cea16fc89ee0dafe7efdaffa60))
+
+### Documentacao
+
+* atualiza DEVELOPMENT_PLAN — Fase 5 concluída, Fase 5.2 dashboard customizável registrada ([c4238d8](https://github.com/DjouBR/nodus-perp/commit/c4238d835034e9cb43d73b3cf9a15718a1e000d6))
+
 ## [0.3.0](https://github.com/DjouBR/nodus-perp/compare/v0.2.0...v0.3.0) (2026-03-08)
 
 ### Novas Funcionalidades
