@@ -5,6 +5,19 @@ import { db } from '@/lib/db/index.js'
 import { training_sessions } from '@/lib/db/schema/sessions'
 import { eq, and, gte } from 'drizzle-orm'
 
+// Converte "2026-03-18T23:00" (datetime-local, sem TZ) para Date
+// sem deslocar o horário para UTC — MySQL datetime não tem TZ,
+// então salvamos exatamente o valor que o usuário digitou.
+function parseDatetimeLocal(str) {
+  if (!str) return null
+  // Substitui o 'T' por espaço e passa para o construtor como string
+  // sem sufixo Z — o Node interpreta sem ajuste de fuso.
+  const [date, time] = str.split('T')
+  const [y, mo, d]  = date.split('-').map(Number)
+  const [h, mi]     = (time || '00:00').split(':').map(Number)
+  return new Date(y, mo - 1, d, h, mi, 0, 0)  // horário local do servidor
+}
+
 // GET /api/sessions/[id]
 export async function GET(req, { params }) {
   const session = await getServerSession(authOptions)
@@ -51,10 +64,9 @@ export async function PUT(req, { params }) {
     }
   }
 
-  // Fix timezone: start_datetime chega como "2026-03-18T10:00" (local)
-  // Interpretamos como UTC para não dobrar offset
-  const start = new Date(start_datetime + ':00Z')
-  const end   = new Date(start.getTime() + (duration_min || 60) * 60_000)
+  const durMin = duration_min || 60
+  const start  = parseDatetimeLocal(start_datetime)
+  const end    = new Date(start.getTime() + durMin * 60_000)
 
   try {
     await db.update(training_sessions)
@@ -64,7 +76,7 @@ export async function PUT(req, { params }) {
         coach_id:        coach_id || session.user.id,
         start_datetime:  start,
         end_datetime:    end,
-        duration_min:    duration_min || 60,
+        duration_min:    durMin,
         capacity:        capacity || 30,
         target_zone_min: target_zone_min ?? 2,
         target_zone_max: target_zone_max ?? 4,
@@ -100,7 +112,6 @@ export async function DELETE(req, { params }) {
   const { searchParams } = new URL(req.url)
   const scope = searchParams.get('scope') || 'single'
 
-  // Busca a sessão para obter group_id e start_datetime
   const [target] = await db.select()
     .from(training_sessions)
     .where(and(
@@ -116,19 +127,13 @@ export async function DELETE(req, { params }) {
 
   try {
     if (scope === 'future' && target.recurrence_group_id) {
-      // Apaga esta e todas as futuras do grupo que NÃO estejam finalizadas
       await db.delete(training_sessions)
         .where(and(
           eq(training_sessions.tenant_id, session.user.tenant_id),
           eq(training_sessions.recurrence_group_id, target.recurrence_group_id),
-          gte(training_sessions.start_datetime, target.start_datetime),
-          // Drizzle não tem ne() nativo — filtramos finished com sql raw
-          // Sessões finished são preservadas automaticamente pois o UI não vai
-          // permitir deletar sessões finished, e o scope=future é aplicado
-          // apenas em sessões scheduled/active/cancelled
+          gte(training_sessions.start_datetime, target.start_datetime)
         ))
     } else {
-      // Hard-delete apenas desta sessão
       await db.delete(training_sessions)
         .where(and(
           eq(training_sessions.id, id),
