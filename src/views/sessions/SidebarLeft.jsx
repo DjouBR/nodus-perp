@@ -85,6 +85,8 @@ export default function SidebarLeft({
             center: 'title',
             end: 'next',
           }}
+          // Abreviaturas sem ponto: "DOM", "SEG", etc.
+          dayHeaderFormat={{ weekday: 'short' }}
           height='auto'
           contentHeight='auto'
           aspectRatio={1.35}
