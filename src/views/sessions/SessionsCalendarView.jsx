@@ -125,14 +125,21 @@ export default function SessionsCalendarView() {
         handleNewSession={handleNewSession}
       />
 
-      {/* Calendário principal — sem padding extra lateral, igual ao template */}
+      {/* Calendário principal */}
       <div className='p-5 pbe-0 grow overflow-visible'>
         <FullCalendar
           ref={calendarRef}
           plugins={[dayGridPlugin, timeGridPlugin, interactionPlugin, listPlugin]}
           initialView='dayGridMonth'
           locale='pt-br'
-          buttonText={{ today: 'Hoje', month: 'Mês', week: 'Semana', day: 'Dia', list: 'Lista' }}
+          buttonText={{
+            today:  'Hoje',
+            month:  'Mês',
+            week:   'Semana',
+            day:    'Dia',
+            list:   'Lista',
+          }}
+          allDayText='Dia inteiro'
           headerToolbar={{
             start: 'prev,next title',
             end:   'dayGridMonth,timeGridWeek,timeGridDay,listMonth'
