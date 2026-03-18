@@ -10,7 +10,6 @@ import listPlugin from '@fullcalendar/list'
 import SidebarLeft from './SidebarLeft'
 import SessionDrawer from './SessionDrawer'
 
-// Mapeamento de status para cores MUI / hex
 const STATUS_COLOR = {
   scheduled: '#6366f1',
   active:    '#22c55e',
@@ -18,7 +17,6 @@ const STATUS_COLOR = {
   cancelled: '#ef4444',
 }
 
-// Converte registro do DB para evento do FullCalendar
 const toCalendarEvent = s => ({
   id:    s.id,
   title: s.name,
@@ -30,53 +28,41 @@ const toCalendarEvent = s => ({
 })
 
 export default function SessionsCalendarView() {
-  const theme = useTheme()
+  const theme   = useTheme()
   const mdAbove = useMediaQuery(theme.breakpoints.up('md'))
   const calendarRef = useRef(null)
 
-  const [events, setEvents] = useState([])
-  const [sessionTypes, setSessionTypes] = useState([])
+  const [events, setEvents]               = useState([])
+  const [sessionTypes, setSessionTypes]   = useState([])
   const [selectedSession, setSelectedSession] = useState(null)
-  const [drawerOpen, setDrawerOpen] = useState(false)
+  const [drawerOpen, setDrawerOpen]       = useState(false)
   const [leftSidebarOpen, setLeftSidebarOpen] = useState(false)
-  // Filtros ativos de tipo (vazio = todos)
-  const [activeTypes, setActiveTypes] = useState([])
-  // Data de clique para pré-preencher o drawer
-  const [clickedDate, setClickedDate] = useState(null)
+  const [activeTypes, setActiveTypes]     = useState([])
+  const [clickedDate, setClickedDate]     = useState(null)
 
-  // ── Fetch ──────────────────────────────────────────────
   const fetchSessions = useCallback(async () => {
     try {
-      const res = await fetch('/api/sessions')
+      const res  = await fetch('/api/sessions')
       const data = await res.json()
       setEvents(Array.isArray(data) ? data.map(toCalendarEvent) : [])
-    } catch (err) {
-      console.error('fetchSessions', err)
-    }
+    } catch (err) { console.error('fetchSessions', err) }
   }, [])
 
   const fetchTypes = useCallback(async () => {
     try {
-      const res = await fetch('/api/sessions/types')
+      const res  = await fetch('/api/sessions/types')
       const data = await res.json()
       setSessionTypes(Array.isArray(data) ? data : [])
       setActiveTypes(Array.isArray(data) ? data.map(t => t.id) : [])
-    } catch (err) {
-      console.error('fetchTypes', err)
-    }
+    } catch (err) { console.error('fetchTypes', err) }
   }, [])
 
-  useEffect(() => {
-    fetchSessions()
-    fetchTypes()
-  }, [])
+  useEffect(() => { fetchSessions(); fetchTypes() }, [])
 
-  // ── Eventos filtrados ───────────────────────────────────
   const filteredEvents = activeTypes.length
     ? events.filter(e => activeTypes.includes(e.extendedProps.session_type_id))
     : events
 
-  // ── Handlers ───────────────────────────────────────────
   const handleDateClick = info => {
     setSelectedSession(null)
     setClickedDate(info.dateStr)
@@ -93,22 +79,15 @@ export default function SessionsCalendarView() {
     await fetch(`/api/sessions/${event.id}`, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        ...event.extendedProps,
-        start_datetime: event.start,
-        end_datetime:   event.end,
-        duration_min:   event.extendedProps.duration_min,
-      }),
+      body: JSON.stringify({ ...event.extendedProps, start_datetime: event.start, end_datetime: event.end }),
     })
     fetchSessions()
   }
 
-  const handleSave = async (data) => {
+  const handleSave = async data => {
     const isEdit = !!data.id
-    const url = isEdit ? `/api/sessions/${data.id}` : '/api/sessions'
-    const method = isEdit ? 'PUT' : 'POST'
-    await fetch(url, {
-      method,
+    await fetch(isEdit ? `/api/sessions/${data.id}` : '/api/sessions', {
+      method: isEdit ? 'PUT' : 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(data),
     })
@@ -117,7 +96,7 @@ export default function SessionsCalendarView() {
     fetchSessions()
   }
 
-  const handleDelete = async (id) => {
+  const handleDelete = async id => {
     await fetch(`/api/sessions/${id}`, { method: 'DELETE' })
     setDrawerOpen(false)
     setSelectedSession(null)
@@ -130,9 +109,11 @@ export default function SessionsCalendarView() {
     setDrawerOpen(true)
   }
 
-  // ── Render ─────────────────────────────────────────────
   return (
-    <div className='flex overflow-hidden rounded border border-divider bg-backgroundPaper' style={{ minHeight: '75vh' }}>
+    <div
+      className='flex overflow-hidden rounded border border-divider bg-backgroundPaper'
+      style={{ minHeight: '75vh' }}
+    >
       <SidebarLeft
         mdAbove={mdAbove}
         leftSidebarOpen={leftSidebarOpen}
@@ -144,7 +125,8 @@ export default function SessionsCalendarView() {
         handleNewSession={handleNewSession}
       />
 
-      <div className='p-6 pbe-0 grow overflow-visible'>
+      {/* Calendário principal — sem padding extra lateral, igual ao template */}
+      <div className='p-5 pbe-0 grow overflow-visible'>
         <FullCalendar
           ref={calendarRef}
           plugins={[dayGridPlugin, timeGridPlugin, interactionPlugin, listPlugin]}
@@ -152,15 +134,10 @@ export default function SessionsCalendarView() {
           locale='pt-br'
           buttonText={{ today: 'Hoje', month: 'Mês', week: 'Semana', day: 'Dia', list: 'Lista' }}
           headerToolbar={{
-            start: 'sidebarToggle, prev, next, title',
-            end: 'dayGridMonth,timeGridWeek,timeGridDay,listMonth'
+            start: 'prev,next title',
+            end:   'dayGridMonth,timeGridWeek,timeGridDay,listMonth'
           }}
-          customButtons={{
-            sidebarToggle: {
-              icon: 'tabler tabler-menu-2',
-              click: () => setLeftSidebarOpen(v => !v)
-            }
-          }}
+          height='100%'
           events={filteredEvents}
           editable
           droppable

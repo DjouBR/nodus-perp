@@ -1,5 +1,6 @@
 'use client'
 
+import { useRef } from 'react'
 import Button from '@mui/material/Button'
 import Drawer from '@mui/material/Drawer'
 import Divider from '@mui/material/Divider'
@@ -7,6 +8,9 @@ import Checkbox from '@mui/material/Checkbox'
 import Typography from '@mui/material/Typography'
 import FormControlLabel from '@mui/material/FormControlLabel'
 import classnames from 'classnames'
+import FullCalendar from '@fullcalendar/react'
+import dayGridPlugin from '@fullcalendar/daygrid'
+import interactionPlugin from '@fullcalendar/interaction'
 
 export default function SidebarLeft({
   mdAbove,
@@ -14,20 +18,21 @@ export default function SidebarLeft({
   sessionTypes,
   activeTypes,
   setActiveTypes,
-  calendarRef,
+  calendarRef,       // ref do calendário principal
   handleLeftSidebarToggle,
   handleNewSession,
 }) {
-  const allChecked = activeTypes.length === sessionTypes.length
+  const allChecked = sessionTypes.length > 0 && activeTypes.length === sessionTypes.length
 
-  const toggleAll = (checked) => {
-    setActiveTypes(checked ? sessionTypes.map(t => t.id) : [])
-  }
+  const toggleAll = checked => setActiveTypes(checked ? sessionTypes.map(t => t.id) : [])
+  const toggleType = id => setActiveTypes(prev =>
+    prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]
+  )
 
-  const toggleType = (id) => {
-    setActiveTypes(prev =>
-      prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]
-    )
+  // Navega o calendário principal ao clicar no mini-calendário
+  const handleMiniDateClick = info => {
+    const api = calendarRef?.current?.getApi()
+    if (api) api.gotoDate(info.dateStr)
   }
 
   return (
@@ -36,18 +41,18 @@ export default function SidebarLeft({
       onClose={handleLeftSidebarToggle}
       variant={mdAbove ? 'permanent' : 'temporary'}
       ModalProps={{
-        disablePortal: true,
-        disableAutoFocus: true,
-        disableScrollLock: true,
-        keepMounted: true,
+        disablePortal:      true,
+        disableAutoFocus:   true,
+        disableScrollLock:  true,
+        keepMounted:        true,
       }}
       className={classnames('block', { static: mdAbove, absolute: !mdAbove })}
       slotProps={{
         paper: {
-          className: classnames('items-start is-[280px] shadow-none rounded rounded-se-none rounded-ee-none', {
-            static: mdAbove,
-            absolute: !mdAbove,
-          }),
+          className: classnames(
+            'items-start is-[280px] shadow-none rounded rounded-se-none rounded-ee-none overflow-y-auto',
+            { static: mdAbove, absolute: !mdAbove }
+          ),
         },
       }}
       sx={{
@@ -70,19 +75,33 @@ export default function SidebarLeft({
 
       <Divider className='is-full' />
 
-      {/* Mini-calendário nativo do FullCalendar */}
-      <div className='p-4 is-full'>
-        <Typography variant='caption' className='font-semibold text-textSecondary uppercase tracking-wider'>
-          Navegação Rápida
-        </Typography>
-        <Typography variant='body2' color='textSecondary' className='mt-1'>
-          Clique em um dia no calendário principal para criar uma sessão.
-        </Typography>
+      {/* Mini-calendário inline ligado ao calendário principal */}
+      <div
+        className='flex justify-center is-full'
+        sx={{ '& .fc': { boxShadow: 'none !important', border: 'none !important' } }}
+      >
+        <FullCalendar
+          plugins={[dayGridPlugin, interactionPlugin]}
+          initialView='dayGridMonth'
+          locale='pt-br'
+          headerToolbar={{
+            start: 'prev',
+            center: 'title',
+            end: 'next',
+          }}
+          height='auto'
+          contentHeight='auto'
+          dateClick={handleMiniDateClick}
+          dayMaxEvents={0}
+          events={[]}  // sem eventos, é só navegação
+          fixedWeekCount={false}
+          showNonCurrentDates={false}
+        />
       </div>
 
       <Divider className='is-full' />
 
-      {/* Filtros por tipo de sessão */}
+      {/* Filtros por tipo */}
       <div className='flex flex-col p-6 is-full'>
         <Typography variant='h6' className='mbe-4'>
           Tipos de Sessão
