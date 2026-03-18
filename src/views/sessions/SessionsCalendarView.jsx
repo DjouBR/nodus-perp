@@ -7,6 +7,8 @@ import dayGridPlugin from '@fullcalendar/daygrid'
 import timeGridPlugin from '@fullcalendar/timegrid'
 import interactionPlugin from '@fullcalendar/interaction'
 import listPlugin from '@fullcalendar/list'
+
+import AppFullCalendar from '@/libs/styles/AppFullCalendar'
 import SidebarLeft from './SidebarLeft'
 import SessionDrawer from './SessionDrawer'
 
@@ -110,10 +112,7 @@ export default function SessionsCalendarView() {
   }
 
   return (
-    <div
-      className='flex overflow-hidden rounded border border-divider bg-backgroundPaper'
-      style={{ minHeight: '75vh' }}
-    >
+    <AppFullCalendar className='overflow-hidden rounded border border-divider bg-backgroundPaper'>
       <SidebarLeft
         mdAbove={mdAbove}
         leftSidebarOpen={leftSidebarOpen}
@@ -126,7 +125,7 @@ export default function SessionsCalendarView() {
       />
 
       {/* Calendário principal */}
-      <div className='p-5 pbe-0 grow overflow-visible'>
+      <div className='p-6 pbe-0 grow overflow-hidden'>
         <FullCalendar
           ref={calendarRef}
           plugins={[dayGridPlugin, timeGridPlugin, interactionPlugin, listPlugin]}
@@ -175,6 +174,6 @@ export default function SessionsCalendarView() {
         onSave={handleSave}
         onDelete={handleDelete}
       />
-    </div>
+    </AppFullCalendar>
   )
 }
