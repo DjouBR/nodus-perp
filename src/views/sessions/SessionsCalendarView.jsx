@@ -13,14 +13,13 @@ import AppFullCalendar from '@/libs/styles/AppFullCalendar'
 import SidebarLeft from './SidebarLeft'
 import SessionDrawer from './SessionDrawer'
 
-// Mapeamento de cor do tipo -> classe CSS do AppFullCalendar
 const colorToClass = color => {
   const map = {
     '#7367f0': 'primary', '#6366f1': 'primary', '#8c57ff': 'primary',
-    '#28c76f': 'success',  '#22c55e': 'success',
-    '#ea5455': 'error',    '#ef4444': 'error',
-    '#ff9f43': 'warning',  '#f59e0b': 'warning',
-    '#00cfe8': 'info',     '#06b6d4': 'info',
+    '#28c76f': 'success', '#22c55e': 'success',
+    '#ea5455': 'error',   '#ef4444': 'error',
+    '#ff9f43': 'warning', '#f59e0b': 'warning',
+    '#00cfe8': 'info',    '#06b6d4': 'info',
     '#64748b': 'secondary','#82868b': 'secondary',
   }
   return map[color?.toLowerCase()] ?? 'primary'
@@ -40,10 +39,8 @@ const toCalendarEvent = s => {
     title: s.name,
     start: s.start_datetime,
     end:   s.end_datetime,
-    // Mantém cor real para views week/day/list
     backgroundColor: color,
     borderColor:     color,
-    // Classe CSS para view mês (usa estilos do AppFullCalendar)
     classNames: [`event-bg-${colorToClass(color)}`],
     extendedProps: { ...s, _color: color },
   }
@@ -85,12 +82,6 @@ export default function SessionsCalendarView() {
     ? events.filter(e => activeTypes.includes(e.extendedProps.session_type_id))
     : events
 
-  const handleDateClick = info => {
-    setSelectedSession(null)
-    setClickedDate(info.dateStr)
-    setDrawerOpen(true)
-  }
-
   const handleEventClick = ({ event }) => {
     setSelectedSession(event.extendedProps)
     setClickedDate(null)
@@ -101,7 +92,7 @@ export default function SessionsCalendarView() {
     await fetch(`/api/sessions/${event.id}`, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ ...event.extendedProps, start_datetime: event.start, end_datetime: event.end }),
+      body: JSON.stringify({ ...event.extendedProps, start_datetime: event.start?.toISOString().slice(0,16), end_datetime: event.end }),
     })
     fetchSessions()
   }
@@ -118,8 +109,8 @@ export default function SessionsCalendarView() {
     fetchSessions()
   }
 
-  const handleDelete = async id => {
-    await fetch(`/api/sessions/${id}`, { method: 'DELETE' })
+  const handleDelete = async (id, scope = 'single') => {
+    await fetch(`/api/sessions/${id}?scope=${scope}`, { method: 'DELETE' })
     setDrawerOpen(false)
     setSelectedSession(null)
     fetchSessions()
@@ -138,20 +129,13 @@ export default function SessionsCalendarView() {
         handleNewSession={() => { setSelectedSession(null); setClickedDate(null); setDrawerOpen(true) }}
       />
 
-      {/* Calendário principal — sem padding lateral para o fc-view-harness compensar corretamente */}
       <div className='pbs-6 pbe-0 pis-6 pie-6 grow overflow-hidden'>
         <FullCalendar
           ref={calendarRef}
           plugins={[dayGridPlugin, timeGridPlugin, interactionPlugin, listPlugin]}
           initialView='dayGridMonth'
           locale={ptBrLocale}
-          buttonText={{
-            today: 'Hoje',
-            month: 'Mês',
-            week:  'Semana',
-            day:   'Dia',
-            list:  'Lista',
-          }}
+          buttonText={{ today: 'Hoje', month: 'Mês', week: 'Semana', day: 'Dia', list: 'Lista' }}
           allDayText='Dia inteiro'
           headerToolbar={{
             start: 'prev,next title',
@@ -159,13 +143,11 @@ export default function SessionsCalendarView() {
           }}
           height='100%'
           events={filteredEvents}
-          editable
-          droppable
-          navLinks
+          editable droppable navLinks
           dayMaxEvents={3}
           eventResizableFromStart
           direction={theme.direction}
-          dateClick={handleDateClick}
+          dateClick={info => { setSelectedSession(null); setClickedDate(info.dateStr); setDrawerOpen(true) }}
           eventClick={handleEventClick}
           eventDrop={handleEventDrop}
         />
