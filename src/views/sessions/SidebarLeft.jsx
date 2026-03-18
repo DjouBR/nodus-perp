@@ -1,5 +1,6 @@
 'use client'
 
+import { useEffect } from 'react'
 import Button from '@mui/material/Button'
 import Drawer from '@mui/material/Drawer'
 import Divider from '@mui/material/Divider'
@@ -9,6 +10,11 @@ import FormControlLabel from '@mui/material/FormControlLabel'
 import classnames from 'classnames'
 
 import AppReactDatepicker from '@/libs/styles/AppReactDatepicker'
+import { registerLocale, setDefaultLocale } from 'react-datepicker'
+import { ptBR } from 'date-fns/locale/pt-BR'
+
+registerLocale('pt-BR', ptBR)
+setDefaultLocale('pt-BR')
 
 export default function SidebarLeft({
   mdAbove,
@@ -72,11 +78,11 @@ export default function SidebarLeft({
 
       <Divider className='is-full' />
 
-      {/* Mini-calendário: react-datepicker inline (igual ao template) */}
+      {/* Mini-calendário: react-datepicker inline com locale pt-BR */}
       <AppReactDatepicker
         inline
-        onChange={handleDateChange}
         locale='pt-BR'
+        onChange={handleDateChange}
         boxProps={{
           className: 'flex justify-center is-full',
           sx: { '& .react-datepicker': { boxShadow: 'none !important', border: 'none !important' } }

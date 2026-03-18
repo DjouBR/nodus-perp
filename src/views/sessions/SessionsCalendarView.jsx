@@ -7,10 +7,24 @@ import dayGridPlugin from '@fullcalendar/daygrid'
 import timeGridPlugin from '@fullcalendar/timegrid'
 import interactionPlugin from '@fullcalendar/interaction'
 import listPlugin from '@fullcalendar/list'
+import ptBrLocale from '@fullcalendar/core/locales/pt-br'
 
 import AppFullCalendar from '@/libs/styles/AppFullCalendar'
 import SidebarLeft from './SidebarLeft'
 import SessionDrawer from './SessionDrawer'
+
+// Mapeamento de cor do tipo -> classe CSS do AppFullCalendar
+const colorToClass = color => {
+  const map = {
+    '#7367f0': 'primary', '#6366f1': 'primary', '#8c57ff': 'primary',
+    '#28c76f': 'success',  '#22c55e': 'success',
+    '#ea5455': 'error',    '#ef4444': 'error',
+    '#ff9f43': 'warning',  '#f59e0b': 'warning',
+    '#00cfe8': 'info',     '#06b6d4': 'info',
+    '#64748b': 'secondary','#82868b': 'secondary',
+  }
+  return map[color?.toLowerCase()] ?? 'primary'
+}
 
 const STATUS_COLOR = {
   scheduled: '#6366f1',
@@ -19,28 +33,34 @@ const STATUS_COLOR = {
   cancelled: '#ef4444',
 }
 
-const toCalendarEvent = s => ({
-  id:    s.id,
-  title: s.name,
-  start: s.start_datetime,
-  end:   s.end_datetime,
-  backgroundColor: s.type_color || STATUS_COLOR[s.status] || '#6366f1',
-  borderColor:     s.type_color || STATUS_COLOR[s.status] || '#6366f1',
-  extendedProps: { ...s },
-})
+const toCalendarEvent = s => {
+  const color = s.type_color || STATUS_COLOR[s.status] || '#6366f1'
+  return {
+    id:    s.id,
+    title: s.name,
+    start: s.start_datetime,
+    end:   s.end_datetime,
+    // Mantém cor real para views week/day/list
+    backgroundColor: color,
+    borderColor:     color,
+    // Classe CSS para view mês (usa estilos do AppFullCalendar)
+    classNames: [`event-bg-${colorToClass(color)}`],
+    extendedProps: { ...s, _color: color },
+  }
+}
 
 export default function SessionsCalendarView() {
   const theme   = useTheme()
   const mdAbove = useMediaQuery(theme.breakpoints.up('md'))
   const calendarRef = useRef(null)
 
-  const [events, setEvents]               = useState([])
-  const [sessionTypes, setSessionTypes]   = useState([])
+  const [events, setEvents]                   = useState([])
+  const [sessionTypes, setSessionTypes]       = useState([])
   const [selectedSession, setSelectedSession] = useState(null)
-  const [drawerOpen, setDrawerOpen]       = useState(false)
+  const [drawerOpen, setDrawerOpen]           = useState(false)
   const [leftSidebarOpen, setLeftSidebarOpen] = useState(false)
-  const [activeTypes, setActiveTypes]     = useState([])
-  const [clickedDate, setClickedDate]     = useState(null)
+  const [activeTypes, setActiveTypes]         = useState([])
+  const [clickedDate, setClickedDate]         = useState(null)
 
   const fetchSessions = useCallback(async () => {
     try {
@@ -105,12 +125,6 @@ export default function SessionsCalendarView() {
     fetchSessions()
   }
 
-  const handleNewSession = () => {
-    setSelectedSession(null)
-    setClickedDate(null)
-    setDrawerOpen(true)
-  }
-
   return (
     <AppFullCalendar className='overflow-hidden rounded border border-divider bg-backgroundPaper'>
       <SidebarLeft
@@ -121,22 +135,22 @@ export default function SessionsCalendarView() {
         setActiveTypes={setActiveTypes}
         calendarRef={calendarRef}
         handleLeftSidebarToggle={() => setLeftSidebarOpen(v => !v)}
-        handleNewSession={handleNewSession}
+        handleNewSession={() => { setSelectedSession(null); setClickedDate(null); setDrawerOpen(true) }}
       />
 
-      {/* Calendário principal */}
-      <div className='p-6 pbe-0 grow overflow-hidden'>
+      {/* Calendário principal — sem padding lateral para o fc-view-harness compensar corretamente */}
+      <div className='pbs-6 pbe-0 pis-6 pie-6 grow overflow-hidden'>
         <FullCalendar
           ref={calendarRef}
           plugins={[dayGridPlugin, timeGridPlugin, interactionPlugin, listPlugin]}
           initialView='dayGridMonth'
-          locale='pt-br'
+          locale={ptBrLocale}
           buttonText={{
-            today:  'Hoje',
-            month:  'Mês',
-            week:   'Semana',
-            day:    'Dia',
-            list:   'Lista',
+            today: 'Hoje',
+            month: 'Mês',
+            week:  'Semana',
+            day:   'Dia',
+            list:  'Lista',
           }}
           allDayText='Dia inteiro'
           headerToolbar={{
@@ -154,14 +168,6 @@ export default function SessionsCalendarView() {
           dateClick={handleDateClick}
           eventClick={handleEventClick}
           eventDrop={handleEventDrop}
-          eventContent={({ event }) => (
-            <div className='flex items-center gap-1 px-1 truncate text-white text-xs font-medium'>
-              {event.extendedProps.type_icon && (
-                <i className={`tabler-${event.extendedProps.type_icon} text-[11px]`} />
-              )}
-              <span className='truncate'>{event.title}</span>
-            </div>
-          )}
         />
       </div>
 
