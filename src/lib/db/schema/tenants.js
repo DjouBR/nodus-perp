@@ -1,4 +1,4 @@
-import { mysqlTable, varchar, text, timestamp, mysqlEnum, int } from 'drizzle-orm/mysql-core'
+import { mysqlTable, varchar, text, timestamp, tinyint, mysqlEnum, int } from 'drizzle-orm/mysql-core'
 
 // ───────────────────────────────────────────────────────────────────
 // PLANOS — recursos e limites por plano
@@ -9,10 +9,11 @@ export const plans = mysqlTable('plans', {
   max_athletes:      int('max_athletes').notNull().default(50),
   max_sessions_day:  int('max_sessions_day').notNull().default(10),
   max_sensors:       int('max_sensors').notNull().default(30),
-  has_acwr:          int('has_acwr').notNull().default(0),
-  has_gamification:  int('has_gamification').notNull().default(0),
-  has_financial:     int('has_financial').notNull().default(0),
-  has_tv_mode:       int('has_tv_mode').notNull().default(0),
+  // tinyint(1) no banco — equivale a boolean no MySQL
+  has_acwr:          tinyint('has_acwr').notNull().default(0),
+  has_gamification:  tinyint('has_gamification').notNull().default(0),
+  has_financial:     tinyint('has_financial').notNull().default(0),
+  has_tv_mode:       tinyint('has_tv_mode').notNull().default(0),
   price_monthly:     varchar('price_monthly', { length: 10 }).notNull().default('0'),
   created_at:        timestamp('created_at').defaultNow(),
 })
