@@ -18,7 +18,7 @@ export default function SidebarLeft({
   sessionTypes,
   activeTypes,
   setActiveTypes,
-  calendarRef,       // ref do calendário principal
+  calendarRef,
   handleLeftSidebarToggle,
   handleNewSession,
 }) {
@@ -29,7 +29,6 @@ export default function SidebarLeft({
     prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]
   )
 
-  // Navega o calendário principal ao clicar no mini-calendário
   const handleMiniDateClick = info => {
     const api = calendarRef?.current?.getApi()
     if (api) api.gotoDate(info.dateStr)
@@ -75,11 +74,8 @@ export default function SidebarLeft({
 
       <Divider className='is-full' />
 
-      {/* Mini-calendário inline ligado ao calendário principal */}
-      <div
-        className='flex justify-center is-full'
-        sx={{ '& .fc': { boxShadow: 'none !important', border: 'none !important' } }}
-      >
+      {/* Mini-calendário compacto */}
+      <div className='is-full mini-calendar-sidebar'>
         <FullCalendar
           plugins={[dayGridPlugin, interactionPlugin]}
           initialView='dayGridMonth'
@@ -91,9 +87,10 @@ export default function SidebarLeft({
           }}
           height='auto'
           contentHeight='auto'
+          aspectRatio={1.35}
           dateClick={handleMiniDateClick}
           dayMaxEvents={0}
-          events={[]}  // sem eventos, é só navegação
+          events={[]}
           fixedWeekCount={false}
           showNonCurrentDates={false}
         />
