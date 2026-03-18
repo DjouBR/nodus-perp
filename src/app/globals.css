@@ -141,3 +141,173 @@ code {
   background-color: rgb(var(--mui-palette-info-mainChannel) / 0.08);
   border: 0;
 }
+
+/* =============================================================
+   FullCalendar — overrides globais (tema dark/light MUI/Vuexy)
+   ============================================================= */
+
+/* Bordas sutis usando a variável do tema, em vez do cinza/branco padrão do FC */
+.fc {
+  --fc-border-color: var(--mui-palette-divider);
+  --fc-page-bg-color: var(--mui-palette-background-paper);
+  --fc-neutral-bg-color: var(--mui-palette-action-hover);
+  --fc-today-bg-color: var(--mui-palette-action-selected);
+  --fc-event-bg-color: var(--primary-color);
+  --fc-event-border-color: var(--primary-color);
+  --fc-button-bg-color: transparent;
+  --fc-button-border-color: var(--mui-palette-divider);
+  --fc-button-text-color: var(--mui-palette-text-primary);
+  --fc-button-active-bg-color: var(--primary-color);
+  --fc-button-active-border-color: var(--primary-color);
+  --fc-button-hover-bg-color: var(--mui-palette-action-hover);
+  --fc-button-hover-border-color: var(--mui-palette-divider);
+}
+
+/* Texto do calendário usando cor do tema */
+.fc .fc-col-header-cell-cushion,
+.fc .fc-daygrid-day-number,
+.fc .fc-list-day-text,
+.fc .fc-list-day-side-text {
+  color: var(--mui-palette-text-primary);
+  text-decoration: none;
+}
+
+/* Remove sombra/borda extra dos botões */
+.fc .fc-button {
+  box-shadow: none !important;
+  text-transform: capitalize;
+  font-size: 0.875rem;
+  font-weight: 500;
+  padding-block: 0.375rem;
+  padding-inline: 0.75rem;
+  border-radius: var(--border-radius);
+}
+
+.fc .fc-button:focus {
+  box-shadow: none !important;
+}
+
+/* Botão ativo (view selecionada) usa cor primária */
+.fc .fc-button-primary:not(:disabled).fc-button-active {
+  background-color: var(--primary-color) !important;
+  border-color: var(--primary-color) !important;
+  color: #fff !important;
+}
+
+/* Título do mês/período */
+.fc .fc-toolbar-title {
+  font-size: 1.125rem;
+  font-weight: 600;
+  color: var(--mui-palette-text-primary);
+}
+
+/* Linha do cabeçalho dos dias */
+.fc .fc-col-header {
+  border-bottom: 1px solid var(--mui-palette-divider);
+}
+
+/* Sem sombra no calendário inteiro */
+.fc .fc-scrollgrid {
+  border-color: var(--mui-palette-divider) !important;
+}
+
+.fc .fc-scrollgrid-section > td,
+.fc .fc-scrollgrid-section > th {
+  border-color: var(--mui-palette-divider) !important;
+}
+
+/* Lista — linhas e texto */
+.fc .fc-list-event:hover td {
+  background-color: var(--mui-palette-action-hover);
+}
+
+.fc .fc-list-empty {
+  background-color: var(--mui-palette-background-paper);
+  color: var(--mui-palette-text-secondary);
+}
+
+/* =============================================================
+   Mini-calendário na sidebar — estilos compactos
+   ============================================================= */
+
+.mini-calendar-sidebar .fc {
+  /* Remove borda externa e sombra */
+  border: none !important;
+  box-shadow: none !important;
+}
+
+.mini-calendar-sidebar .fc-toolbar {
+  /* Título e botões lado a lado */
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding-inline: 0.5rem;
+  padding-block: 0.5rem;
+  margin-bottom: 0 !important;
+}
+
+.mini-calendar-sidebar .fc-toolbar-title {
+  font-size: 0.9375rem !important;
+  font-weight: 600;
+  color: var(--mui-palette-text-primary);
+}
+
+/* Células menores e compactas */
+.mini-calendar-sidebar .fc-daygrid-day {
+  height: auto !important;
+  min-height: 2rem !important;
+}
+
+.mini-calendar-sidebar .fc-daygrid-day-frame {
+  min-height: 2rem !important;
+  padding: 0.125rem !important;
+}
+
+.mini-calendar-sidebar .fc-daygrid-day-number {
+  font-size: 0.75rem;
+  padding: 0.125rem 0.25rem;
+  line-height: 1.5;
+}
+
+.mini-calendar-sidebar .fc-col-header-cell-cushion {
+  font-size: 0.6875rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  padding-block: 0.25rem;
+}
+
+/* Remove a grade de bordas no mini-calendário */
+.mini-calendar-sidebar .fc-scrollgrid,
+.mini-calendar-sidebar .fc-scrollgrid-section > td,
+.mini-calendar-sidebar .fc-scrollgrid-section > th,
+.mini-calendar-sidebar td,
+.mini-calendar-sidebar th {
+  border-color: transparent !important;
+}
+
+/* Botões de navegação do mini-calendário */
+.mini-calendar-sidebar .fc-button {
+  padding: 0.25rem 0.375rem !important;
+  font-size: 0.75rem !important;
+  background-color: transparent !important;
+  border-color: transparent !important;
+  color: var(--mui-palette-text-secondary) !important;
+}
+
+.mini-calendar-sidebar .fc-button:hover {
+  background-color: var(--mui-palette-action-hover) !important;
+  color: var(--mui-palette-text-primary) !important;
+}
+
+/* Dia de hoje no mini */
+.mini-calendar-sidebar .fc-day-today .fc-daygrid-day-number {
+  background-color: var(--primary-color);
+  color: #fff !important;
+  border-radius: 50%;
+  width: 1.5rem;
+  height: 1.5rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin: 0 auto;
+}
