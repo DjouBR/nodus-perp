@@ -1,6 +1,5 @@
 'use client'
 
-import { useRef } from 'react'
 import Button from '@mui/material/Button'
 import Drawer from '@mui/material/Drawer'
 import Divider from '@mui/material/Divider'
@@ -8,9 +7,8 @@ import Checkbox from '@mui/material/Checkbox'
 import Typography from '@mui/material/Typography'
 import FormControlLabel from '@mui/material/FormControlLabel'
 import classnames from 'classnames'
-import FullCalendar from '@fullcalendar/react'
-import dayGridPlugin from '@fullcalendar/daygrid'
-import interactionPlugin from '@fullcalendar/interaction'
+
+import AppReactDatepicker from '@/libs/styles/AppReactDatepicker'
 
 export default function SidebarLeft({
   mdAbove,
@@ -29,9 +27,9 @@ export default function SidebarLeft({
     prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]
   )
 
-  const handleMiniDateClick = info => {
+  const handleDateChange = date => {
     const api = calendarRef?.current?.getApi()
-    if (api) api.gotoDate(info.dateStr)
+    if (api && date) api.gotoDate(date)
   }
 
   return (
@@ -74,33 +72,20 @@ export default function SidebarLeft({
 
       <Divider className='is-full' />
 
-      {/* Mini-calendário compacto */}
-      <div className='is-full mini-calendar-sidebar'>
-        <FullCalendar
-          plugins={[dayGridPlugin, interactionPlugin]}
-          initialView='dayGridMonth'
-          locale='pt-br'
-          headerToolbar={{
-            start: 'prev',
-            center: 'title',
-            end: 'next',
-          }}
-          // Abreviaturas sem ponto: "DOM", "SEG", etc.
-          dayHeaderFormat={{ weekday: 'short' }}
-          height='auto'
-          contentHeight='auto'
-          aspectRatio={1.35}
-          dateClick={handleMiniDateClick}
-          dayMaxEvents={0}
-          events={[]}
-          fixedWeekCount={false}
-          showNonCurrentDates={false}
-        />
-      </div>
+      {/* Mini-calendário: react-datepicker inline (igual ao template) */}
+      <AppReactDatepicker
+        inline
+        onChange={handleDateChange}
+        locale='pt-BR'
+        boxProps={{
+          className: 'flex justify-center is-full',
+          sx: { '& .react-datepicker': { boxShadow: 'none !important', border: 'none !important' } }
+        }}
+      />
 
       <Divider className='is-full' />
 
-      {/* Filtros por tipo */}
+      {/* Filtros por tipo de sessão */}
       <div className='flex flex-col p-6 is-full'>
         <Typography variant='h6' className='mbe-4'>
           Tipos de Sessão
