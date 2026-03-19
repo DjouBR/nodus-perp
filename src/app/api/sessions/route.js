@@ -2,19 +2,16 @@ import { NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/libs/auth'
 import { db } from '@/lib/db/index.js'
-import { training_sessions, session_types } from '@/lib/db/schema/sessions'
-import { users, athlete_profiles } from '@/lib/db/schema/users'
-import { eq, and, gte, or, isNull } from 'drizzle-orm'
+import { training_sessions, session_types, session_athletes } from '@/lib/db/schema/sessions'
+import { users } from '@/lib/db/schema/users'
+import { eq, and, gte, or, isNull, desc } from 'drizzle-orm'
 import { randomUUID } from 'crypto'
 
-const ALLOWED_ROLES = ['tenant_admin', 'academy_coach', 'coach']
+const STAFF_ROLES   = ['tenant_admin', 'academy_coach', 'coach']
+const ATHLETE_ROLES = ['athlete', 'academy_athlete', 'coach_athlete']
 
-// Retorna o filtro correto de tenant para cada role
 function tenantFilter(user) {
-  if (user.role === 'coach') {
-    // Treinador independente não tem tenant_id — filtra pelo coach_id
-    return eq(training_sessions.coach_id, user.id)
-  }
+  if (user.role === 'coach') return eq(training_sessions.coach_id, user.id)
   return eq(training_sessions.tenant_id, user.tenant_id)
 }
 
@@ -23,7 +20,47 @@ export async function GET(req) {
   const session = await getServerSession(authOptions)
   if (!session) return NextResponse.json({ error: 'Não autorizado' }, { status: 401 })
 
+  const { role, id: userId, tenant_id: tenantId } = session.user
+
   try {
+    // ── Atleta: retorna apenas as suas próprias sessões (via session_athletes) ──
+    if (ATHLETE_ROLES.includes(role)) {
+      const rows = await db
+        .select({
+          id:                  training_sessions.id,
+          name:                training_sessions.name,
+          start_datetime:      training_sessions.start_datetime,
+          end_datetime:        training_sessions.end_datetime,
+          duration_min:        training_sessions.duration_min,
+          status:              training_sessions.status,
+          capacity:            training_sessions.capacity,
+          notes:               training_sessions.notes,
+          target_zone_min:     training_sessions.target_zone_min,
+          target_zone_max:     training_sessions.target_zone_max,
+          coach_id:            training_sessions.coach_id,
+          session_type_id:     training_sessions.session_type_id,
+          recurrence_group_id: training_sessions.recurrence_group_id,
+          checked_in:          session_athletes.checked_in,
+          coach_name:          users.name,
+          type_name:           session_types.name,
+          type_color:          session_types.color,
+          type_icon:           session_types.icon,
+        })
+        .from(session_athletes)
+        .innerJoin(training_sessions, eq(training_sessions.id, session_athletes.session_id))
+        .leftJoin(users, eq(training_sessions.coach_id, users.id))
+        .leftJoin(session_types, eq(training_sessions.session_type_id, session_types.id))
+        .where(eq(session_athletes.athlete_id, userId))
+        .orderBy(desc(training_sessions.start_datetime))
+
+      return NextResponse.json(rows)
+    }
+
+    // ── Staff: retorna todas as sessões do tenant/coach ──
+    if (!STAFF_ROLES.includes(role)) {
+      return NextResponse.json({ error: 'Acesso negado' }, { status: 403 })
+    }
+
     const sessions = await db
       .select({
         id:                  training_sessions.id,
@@ -64,7 +101,7 @@ export async function POST(req) {
 
   const { role, id: userId, tenant_id: tenantId } = session.user
 
-  if (!ALLOWED_ROLES.includes(role)) {
+  if (!STAFF_ROLES.includes(role)) {
     return NextResponse.json({ error: 'Acesso negado' }, { status: 403 })
   }
 
@@ -73,9 +110,7 @@ export async function POST(req) {
     name, session_type_id, coach_id,
     start_datetime, duration_min, capacity,
     target_zone_min, target_zone_max, notes,
-    recurrence_rule,
-    recurrence_end_date,
-    // Atletas pré-adicionados (array de IDs) — apenas para coach independente ou sessões individuais
+    recurrence_rule, recurrence_end_date,
     athlete_ids,
   } = body
 
@@ -83,52 +118,37 @@ export async function POST(req) {
     return NextResponse.json({ error: 'Campos obrigatórios ausentes' }, { status: 400 })
   }
 
-  // Coach independente sempre é o próprio coach; academy_coach também
-  const finalCoachId = (role === 'academy_coach' || role === 'coach')
-    ? userId
-    : (coach_id || userId)
+  const finalCoachId   = (role === 'academy_coach' || role === 'coach') ? userId : (coach_id || userId)
+  const finalTenantId  = role === 'coach' ? null : tenantId
+  const durMin         = duration_min || 60
+  const DAY_MAP        = { SUN: 0, MON: 1, TUE: 2, WED: 3, THU: 4, FRI: 5, SAT: 6 }
 
-  // tenant_id: coach independente tem NULL, guarda NULL mesmo
-  const finalTenantId = role === 'coach' ? null : tenantId
-
-  const durMin = duration_min || 60
-  const DAY_MAP = { SUN: 0, MON: 1, TUE: 2, WED: 3, THU: 4, FRI: 5, SAT: 6 }
-
-  // Função para montar objeto de sessão
   const buildRow = (start, groupId = null) => ({
-    id: randomUUID(),
-    tenant_id:           finalTenantId,
-    session_type_id:     session_type_id || null,
-    coach_id:            finalCoachId,
+    id:                   randomUUID(),
+    tenant_id:            finalTenantId,
+    session_type_id:      session_type_id || null,
+    coach_id:             finalCoachId,
     name,
-    start_datetime:      start,
-    end_datetime:        new Date(start.getTime() + durMin * 60_000),
-    duration_min:        durMin,
-    capacity:            capacity || 30,
-    target_zone_min:     target_zone_min || 2,
-    target_zone_max:     target_zone_max || 4,
-    notes:               notes || null,
-    status:              'scheduled',
-    recurrence_group_id: groupId,
-    recurrence_rule:     groupId ? recurrence_rule : null,
-    recurrence_end_date: groupId ? new Date(recurrence_end_date) : null,
+    start_datetime:       start,
+    end_datetime:         new Date(start.getTime() + durMin * 60_000),
+    duration_min:         durMin,
+    capacity:             capacity || 30,
+    target_zone_min:      target_zone_min || 2,
+    target_zone_max:      target_zone_max || 4,
+    notes:                notes || null,
+    status:               'scheduled',
+    recurrence_group_id:  groupId,
+    recurrence_rule:      groupId ? recurrence_rule : null,
+    recurrence_end_date:  groupId ? new Date(recurrence_end_date) : null,
   })
 
-  // Função para inserir atletas na session_athletes
   const insertAthletes = async (sessionId, ids) => {
     if (!ids || ids.length === 0) return
-    const { session_athletes } = await import('@/lib/db/schema/sessions')
-    const rows = ids.map(aid => ({
-      id:         randomUUID(),
-      session_id: sessionId,
-      athlete_id: aid,
-      checked_in: 0,
-    }))
+    const rows = ids.map(aid => ({ id: randomUUID(), session_id: sessionId, athlete_id: aid, checked_in: 0 }))
     await db.insert(session_athletes).values(rows)
   }
 
   try {
-    // ── Sessão simples ───────────────────────────────────────────
     if (!recurrence_rule || !recurrence_end_date) {
       const start = new Date(start_datetime)
       const row   = buildRow(start)
@@ -137,7 +157,6 @@ export async function POST(req) {
       return NextResponse.json({ id: row.id }, { status: 201 })
     }
 
-    // ── Sessão recorrente ───────────────────────────────────────────
     const days    = recurrence_rule.split(',').map(d => DAY_MAP[d.trim().toUpperCase()]).filter(d => d !== undefined)
     const endDate = new Date(recurrence_end_date + 'T23:59:59')
     const base    = new Date(start_datetime)
@@ -145,8 +164,7 @@ export async function POST(req) {
     const baseM   = base.getMinutes()
     const groupId = randomUUID()
     const rows    = []
-
-    const cursor = new Date(base)
+    const cursor  = new Date(base)
     cursor.setHours(0, 0, 0, 0)
 
     while (cursor <= endDate) {
@@ -165,11 +183,7 @@ export async function POST(req) {
     for (let i = 0; i < rows.length; i += 50) {
       await db.insert(training_sessions).values(rows.slice(i, i + 50))
     }
-
-    // Atletas são inseridos em todas as ocorrências
-    for (const row of rows) {
-      await insertAthletes(row.id, athlete_ids)
-    }
+    for (const row of rows) await insertAthletes(row.id, athlete_ids)
 
     return NextResponse.json({ recurrence_group_id: groupId, count: rows.length }, { status: 201 })
   } catch (err) {

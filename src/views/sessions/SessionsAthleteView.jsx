@@ -1,0 +1,300 @@
+'use client'
+
+import { useState, useEffect, useCallback } from 'react'
+import Box from '@mui/material/Box'
+import Typography from '@mui/material/Typography'
+import Card from '@mui/material/Card'
+import CardContent from '@mui/material/CardContent'
+import Chip from '@mui/material/Chip'
+import Button from '@mui/material/Button'
+import IconButton from '@mui/material/IconButton'
+import Dialog from '@mui/material/Dialog'
+import DialogTitle from '@mui/material/DialogTitle'
+import DialogContent from '@mui/material/DialogContent'
+import DialogActions from '@mui/material/DialogActions'
+import Divider from '@mui/material/Divider'
+import Skeleton from '@mui/material/Skeleton'
+import Tabs from '@mui/material/Tabs'
+import Tab from '@mui/material/Tab'
+
+const STATUS_LABELS = {
+  scheduled: { label: 'Agendada',     color: 'primary' },
+  active:    { label: 'Em andamento', color: 'success' },
+  finished:  { label: 'Finalizada',   color: 'default' },
+  cancelled: { label: 'Cancelada',    color: 'error'   },
+}
+
+const ZONE_COLORS = { 1: '#64748b', 2: '#22c55e', 3: '#f59e0b', 4: '#f97316', 5: '#ef4444' }
+
+function formatDate(dt) {
+  if (!dt) return ''
+  return new Date(dt).toLocaleDateString('pt-BR', {
+    weekday: 'long', day: '2-digit', month: 'short', year: 'numeric'
+  })
+}
+
+function formatTime(dt) {
+  if (!dt) return ''
+  return new Date(dt).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })
+}
+
+function SessionDetailDialog({ session: s, open, onClose }) {
+  if (!s) return null
+  const statusInfo = STATUS_LABELS[s.status] || STATUS_LABELS.scheduled
+
+  return (
+    <Dialog open={open} onClose={onClose} maxWidth='sm' fullWidth>
+      <DialogTitle>
+        <Box className='flex items-center justify-between'>
+          <Box className='flex items-center gap-2'>
+            {s.type_color && (
+              <span style={{
+                width: 12, height: 12, borderRadius: '50%',
+                background: s.type_color, display: 'inline-block', flexShrink: 0
+              }} />
+            )}
+            <Typography variant='h6' component='span'>{s.name}</Typography>
+          </Box>
+          <IconButton size='small' onClick={onClose}>
+            <i className='tabler-x text-xl' />
+          </IconButton>
+        </Box>
+      </DialogTitle>
+
+      <DialogContent dividers>
+        <div className='flex flex-col gap-4'>
+
+          {/* Status + tipo */}
+          <Box className='flex flex-wrap gap-2'>
+            <Chip size='small' label={statusInfo.label} color={statusInfo.color} />
+            {s.type_name && <Chip size='small' label={s.type_name} variant='outlined' />}
+            {s.checked_in ? <Chip size='small' label='Check-in realizado' color='success' variant='tonal' /> : null}
+          </Box>
+
+          <Divider />
+
+          {/* Data / hora / duração */}
+          <div className='grid grid-cols-2 gap-3'>
+            <InfoRow icon='tabler-calendar' label='Data' value={formatDate(s.start_datetime)} />
+            <InfoRow icon='tabler-clock' label='Horário'
+              value={`${formatTime(s.start_datetime)} → ${formatTime(s.end_datetime)}`} />
+            <InfoRow icon='tabler-hourglass' label='Duração' value={`${s.duration_min} min`} />
+            <InfoRow icon='tabler-users' label='Capacidade' value={`${s.capacity} atletas`} />
+            {s.coach_name && <InfoRow icon='tabler-user' label='Coach' value={s.coach_name} />}
+          </div>
+
+          {/* Zonas de FC alvo */}
+          {(s.target_zone_min || s.target_zone_max) && (
+            <>
+              <Divider />
+              <div>
+                <Typography variant='caption' color='textSecondary' sx={{ mb: 1, display: 'block' }}>
+                  Zonas de FC alvo
+                </Typography>
+                <Box className='flex gap-2'>
+                  {[s.target_zone_min, s.target_zone_max].filter(Boolean).map((z, i) => (
+                    <Chip
+                      key={i}
+                      size='small'
+                      label={`Z${z}`}
+                      sx={{ background: ZONE_COLORS[z], color: '#fff', fontWeight: 600 }}
+                    />
+                  ))}
+                  <Typography variant='caption' color='textSecondary' className='self-center'>
+                    {s.target_zone_min === s.target_zone_max
+                      ? `Zona ${s.target_zone_min}`
+                      : `Zona ${s.target_zone_min} a Z${s.target_zone_max}`}
+                  </Typography>
+                </Box>
+              </div>
+            </>
+          )}
+
+          {/* Notas */}
+          {s.notes && (
+            <>
+              <Divider />
+              <div>
+                <Typography variant='caption' color='textSecondary' sx={{ mb: 0.5, display: 'block' }}>
+                  Notas do coach
+                </Typography>
+                <Typography variant='body2'>{s.notes}</Typography>
+              </div>
+            </>
+          )}
+        </div>
+      </DialogContent>
+
+      <DialogActions sx={{ p: 2 }}>
+        <Button variant='outlined' onClick={onClose}>Fechar</Button>
+      </DialogActions>
+    </Dialog>
+  )
+}
+
+function InfoRow({ icon, label, value }) {
+  return (
+    <Box className='flex items-start gap-2'>
+      <i className={`${icon} text-lg text-primary mt-0.5`} />
+      <div>
+        <Typography variant='caption' color='textSecondary' display='block'>{label}</Typography>
+        <Typography variant='body2' className='font-medium'>{value}</Typography>
+      </div>
+    </Box>
+  )
+}
+
+function SessionCard({ session: s, onDetail }) {
+  const statusInfo = STATUS_LABELS[s.status] || STATUS_LABELS.scheduled
+  const isPast     = new Date(s.start_datetime) < new Date()
+
+  return (
+    <Card
+      variant='outlined'
+      sx={{
+        opacity: s.status === 'cancelled' ? 0.6 : 1,
+        borderLeft: `4px solid ${s.type_color || '#6366f1'}`,
+        transition: 'box-shadow .15s',
+        '&:hover': { boxShadow: 3 },
+      }}
+    >
+      <CardContent sx={{ p: '14px 16px !important' }}>
+        <Box className='flex items-center justify-between gap-2 flex-wrap'>
+
+          {/* Lado esquerdo: data + nome + tipo */}
+          <Box className='flex items-center gap-3 min-w-0'>
+            {/* Bloco de data */}
+            <Box className='flex flex-col items-center justify-center rounded-lg px-2 py-1 min-w-[48px]'
+              sx={{ background: 'var(--mui-palette-action-hover)' }}>
+              <Typography variant='caption' color='textSecondary' sx={{ lineHeight: 1 }}>
+                {new Date(s.start_datetime).toLocaleDateString('pt-BR', { weekday: 'short' }).replace('.', '')}
+              </Typography>
+              <Typography variant='h6' sx={{ lineHeight: 1.1, fontWeight: 700 }}>
+                {new Date(s.start_datetime).getDate()}
+              </Typography>
+              <Typography variant='caption' color='textSecondary' sx={{ lineHeight: 1 }}>
+                {new Date(s.start_datetime).toLocaleDateString('pt-BR', { month: 'short' }).replace('.', '')}
+              </Typography>
+            </Box>
+
+            {/* Info */}
+            <Box className='min-w-0'>
+              <Typography variant='body1' className='font-semibold truncate'>{s.name}</Typography>
+              <Box className='flex flex-wrap items-center gap-1 mt-0.5'>
+                <Typography variant='caption' color='textSecondary'>
+                  <i className='tabler-clock text-xs mr-0.5' />
+                  {formatTime(s.start_datetime)}
+                  {s.duration_min ? ` • ${s.duration_min} min` : ''}
+                </Typography>
+                {s.coach_name && (
+                  <Typography variant='caption' color='textSecondary'>
+                    • <i className='tabler-user text-xs mr-0.5' />{s.coach_name}
+                  </Typography>
+                )}
+              </Box>
+            </Box>
+          </Box>
+
+          {/* Lado direito: tipo + status + botão */}
+          <Box className='flex items-center gap-2 flex-shrink-0'>
+            {s.type_name && (
+              <Chip
+                size='small'
+                label={s.type_name}
+                variant='tonal'
+                sx={{ background: s.type_color ? `${s.type_color}22` : undefined, color: s.type_color }}
+              />
+            )}
+            <Chip size='small' label={statusInfo.label} color={statusInfo.color} />
+            <Button
+              size='small' variant='outlined'
+              startIcon={<i className='tabler-eye text-sm' />}
+              onClick={() => onDetail(s)}
+            >
+              Ver detalhes
+            </Button>
+          </Box>
+        </Box>
+      </CardContent>
+    </Card>
+  )
+}
+
+export default function SessionsAthleteView() {
+  const [sessions, setSessions] = useState([])
+  const [loading, setLoading]   = useState(true)
+  const [tab, setTab]           = useState(0)         // 0 = próximas, 1 = passadas
+  const [detail, setDetail]     = useState(null)
+
+  const fetchSessions = useCallback(async () => {
+    setLoading(true)
+    try {
+      const res  = await fetch('/api/sessions')
+      const data = await res.json()
+      setSessions(Array.isArray(data) ? data : [])
+    } catch { setSessions([]) }
+    finally  { setLoading(false) }
+  }, [])
+
+  useEffect(() => { fetchSessions() }, [fetchSessions])
+
+  const now      = new Date()
+  const upcoming = sessions.filter(s => new Date(s.start_datetime) >= now && s.status !== 'cancelled')
+    .sort((a, b) => new Date(a.start_datetime) - new Date(b.start_datetime))
+  const past     = sessions.filter(s => new Date(s.start_datetime) < now || s.status === 'finished' || s.status === 'cancelled')
+    .sort((a, b) => new Date(b.start_datetime) - new Date(a.start_datetime))
+
+  const listed = tab === 0 ? upcoming : past
+
+  return (
+    <Box className='flex flex-col gap-6'>
+      {/* Header */}
+      <Box className='flex items-center justify-between flex-wrap gap-3'>
+        <div>
+          <Typography variant='h5' className='font-bold'>Minhas Sessões</Typography>
+          <Typography variant='body2' color='textSecondary'>
+            {upcoming.length} sessão{upcoming.length !== 1 ? 'ões' : ''} próxima{upcoming.length !== 1 ? 's' : ''}
+          </Typography>
+        </div>
+        <IconButton onClick={fetchSessions} title='Atualizar'>
+          <i className='tabler-refresh text-xl' />
+        </IconButton>
+      </Box>
+
+      {/* Tabs */}
+      <Tabs value={tab} onChange={(_, v) => setTab(v)} sx={{ borderBottom: 1, borderColor: 'divider' }}>
+        <Tab label={`Próximas (${upcoming.length})`} />
+        <Tab label={`Histórico (${past.length})`} />
+      </Tabs>
+
+      {/* Lista */}
+      {loading ? (
+        <div className='flex flex-col gap-3'>
+          {[1, 2, 3].map(i => <Skeleton key={i} variant='rounded' height={72} />)}
+        </div>
+      ) : listed.length === 0 ? (
+        <Box className='flex flex-col items-center justify-center py-16 gap-3'>
+          <i className={`${
+            tab === 0 ? 'tabler-calendar-off' : 'tabler-history'
+          } text-5xl text-secondary opacity-40`} />
+          <Typography variant='body1' color='textSecondary'>
+            {tab === 0 ? 'Nenhuma sessão agendada' : 'Nenhuma sessão no histórico'}
+          </Typography>
+        </Box>
+      ) : (
+        <div className='flex flex-col gap-3'>
+          {listed.map(s => (
+            <SessionCard key={s.id} session={s} onDetail={setDetail} />
+          ))}
+        </div>
+      )}
+
+      {/* Modal de detalhes */}
+      <SessionDetailDialog
+        session={detail}
+        open={!!detail}
+        onClose={() => setDetail(null)}
+      />
+    </Box>
+  )
+}
