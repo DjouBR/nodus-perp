@@ -3,16 +3,25 @@ import { getServerSession } from 'next-auth'
 import { authOptions } from '@/libs/auth'
 import { db } from '@/lib/db/index.js'
 import { training_sessions, session_types } from '@/lib/db/schema/sessions'
-import { users } from '@/lib/db/schema/users'
-import { eq, and, gte } from 'drizzle-orm'
+import { users, athlete_profiles } from '@/lib/db/schema/users'
+import { eq, and, gte, or, isNull } from 'drizzle-orm'
 import { randomUUID } from 'crypto'
+
+const ALLOWED_ROLES = ['tenant_admin', 'academy_coach', 'coach']
+
+// Retorna o filtro correto de tenant para cada role
+function tenantFilter(user) {
+  if (user.role === 'coach') {
+    // Treinador independente não tem tenant_id — filtra pelo coach_id
+    return eq(training_sessions.coach_id, user.id)
+  }
+  return eq(training_sessions.tenant_id, user.tenant_id)
+}
 
 // GET /api/sessions
 export async function GET(req) {
   const session = await getServerSession(authOptions)
   if (!session) return NextResponse.json({ error: 'Não autorizado' }, { status: 401 })
-
-  const tenantId = session.user.tenant_id
 
   try {
     const sessions = await db
@@ -39,7 +48,7 @@ export async function GET(req) {
       .from(training_sessions)
       .leftJoin(users, eq(training_sessions.coach_id, users.id))
       .leftJoin(session_types, eq(training_sessions.session_type_id, session_types.id))
-      .where(eq(training_sessions.tenant_id, tenantId))
+      .where(tenantFilter(session.user))
 
     return NextResponse.json(sessions)
   } catch (err) {
@@ -48,15 +57,14 @@ export async function GET(req) {
   }
 }
 
-// POST /api/sessions — cria sessão simples ou expande recorrência
+// POST /api/sessions
 export async function POST(req) {
   const session = await getServerSession(authOptions)
   if (!session) return NextResponse.json({ error: 'Não autorizado' }, { status: 401 })
 
-  const tenantId = session.user.tenant_id
-  const role = session.user.role
+  const { role, id: userId, tenant_id: tenantId } = session.user
 
-  if (!['tenant_admin', 'academy_coach'].includes(role)) {
+  if (!ALLOWED_ROLES.includes(role)) {
     return NextResponse.json({ error: 'Acesso negado' }, { status: 403 })
   }
 
@@ -65,81 +73,87 @@ export async function POST(req) {
     name, session_type_id, coach_id,
     start_datetime, duration_min, capacity,
     target_zone_min, target_zone_max, notes,
-    // Recorrência
-    recurrence_rule,      // ex: "MON,WED,FRI" ou null
-    recurrence_end_date,  // ex: "2026-06-30" ou null
+    recurrence_rule,
+    recurrence_end_date,
+    // Atletas pré-adicionados (array de IDs) — apenas para coach independente ou sessões individuais
+    athlete_ids,
   } = body
 
   if (!name || !start_datetime) {
     return NextResponse.json({ error: 'Campos obrigatórios ausentes' }, { status: 400 })
   }
 
-  const finalCoachId = role === 'academy_coach' ? session.user.id : (coach_id || session.user.id)
-  const durMin = duration_min || 60
+  // Coach independente sempre é o próprio coach; academy_coach também
+  const finalCoachId = (role === 'academy_coach' || role === 'coach')
+    ? userId
+    : (coach_id || userId)
 
-  // Mapa abreviação -> número do dia JS (0=Dom)
+  // tenant_id: coach independente tem NULL, guarda NULL mesmo
+  const finalTenantId = role === 'coach' ? null : tenantId
+
+  const durMin = duration_min || 60
   const DAY_MAP = { SUN: 0, MON: 1, TUE: 2, WED: 3, THU: 4, FRI: 5, SAT: 6 }
 
+  // Função para montar objeto de sessão
+  const buildRow = (start, groupId = null) => ({
+    id: randomUUID(),
+    tenant_id:           finalTenantId,
+    session_type_id:     session_type_id || null,
+    coach_id:            finalCoachId,
+    name,
+    start_datetime:      start,
+    end_datetime:        new Date(start.getTime() + durMin * 60_000),
+    duration_min:        durMin,
+    capacity:            capacity || 30,
+    target_zone_min:     target_zone_min || 2,
+    target_zone_max:     target_zone_max || 4,
+    notes:               notes || null,
+    status:              'scheduled',
+    recurrence_group_id: groupId,
+    recurrence_rule:     groupId ? recurrence_rule : null,
+    recurrence_end_date: groupId ? new Date(recurrence_end_date) : null,
+  })
+
+  // Função para inserir atletas na session_athletes
+  const insertAthletes = async (sessionId, ids) => {
+    if (!ids || ids.length === 0) return
+    const { session_athletes } = await import('@/lib/db/schema/sessions')
+    const rows = ids.map(aid => ({
+      id:         randomUUID(),
+      session_id: sessionId,
+      athlete_id: aid,
+      checked_in: 0,
+    }))
+    await db.insert(session_athletes).values(rows)
+  }
+
   try {
-    // ── Sessão simples (sem recorrência) ──────────────────────────────
+    // ── Sessão simples ───────────────────────────────────────────
     if (!recurrence_rule || !recurrence_end_date) {
       const start = new Date(start_datetime)
-      const end   = new Date(start.getTime() + durMin * 60_000)
-      const id    = randomUUID()
-
-      await db.insert(training_sessions).values({
-        id, tenant_id: tenantId,
-        session_type_id: session_type_id || null,
-        coach_id: finalCoachId,
-        name, start_datetime: start, end_datetime: end,
-        duration_min: durMin, capacity: capacity || 30,
-        target_zone_min: target_zone_min || 2,
-        target_zone_max: target_zone_max || 4,
-        notes: notes || null,
-        status: 'scheduled',
-      })
-
-      return NextResponse.json({ id }, { status: 201 })
+      const row   = buildRow(start)
+      await db.insert(training_sessions).values(row)
+      await insertAthletes(row.id, athlete_ids)
+      return NextResponse.json({ id: row.id }, { status: 201 })
     }
 
-    // ── Sessão recorrente — gera uma linha por ocorrência ─────────────
-    const days = recurrence_rule.split(',').map(d => DAY_MAP[d.trim().toUpperCase()]).filter(d => d !== undefined)
-    const endDate  = new Date(recurrence_end_date + 'T23:59:59')
-    const baseDate = new Date(start_datetime)    // data/hora da primeira ocorrência
-    const baseHour = baseDate.getHours()
-    const baseMin  = baseDate.getMinutes()
-
+    // ── Sessão recorrente ───────────────────────────────────────────
+    const days    = recurrence_rule.split(',').map(d => DAY_MAP[d.trim().toUpperCase()]).filter(d => d !== undefined)
+    const endDate = new Date(recurrence_end_date + 'T23:59:59')
+    const base    = new Date(start_datetime)
+    const baseH   = base.getHours()
+    const baseM   = base.getMinutes()
     const groupId = randomUUID()
-    const rows = []
+    const rows    = []
 
-    // Itera dia a dia de baseDate até endDate
-    const cursor = new Date(baseDate)
+    const cursor = new Date(base)
     cursor.setHours(0, 0, 0, 0)
 
     while (cursor <= endDate) {
       if (days.includes(cursor.getDay())) {
         const start = new Date(cursor)
-        start.setHours(baseHour, baseMin, 0, 0)
-        const end = new Date(start.getTime() + durMin * 60_000)
-
-        rows.push({
-          id: randomUUID(),
-          tenant_id:           tenantId,
-          session_type_id:     session_type_id || null,
-          coach_id:            finalCoachId,
-          name,
-          start_datetime:      start,
-          end_datetime:        end,
-          duration_min:        durMin,
-          capacity:            capacity || 30,
-          target_zone_min:     target_zone_min || 2,
-          target_zone_max:     target_zone_max || 4,
-          notes:               notes || null,
-          status:              'scheduled',
-          recurrence_group_id: groupId,
-          recurrence_rule:     recurrence_rule,
-          recurrence_end_date: new Date(recurrence_end_date),
-        })
+        start.setHours(baseH, baseM, 0, 0)
+        rows.push(buildRow(start, groupId))
       }
       cursor.setDate(cursor.getDate() + 1)
     }
@@ -148,9 +162,13 @@ export async function POST(req) {
       return NextResponse.json({ error: 'Nenhuma ocorrência gerada para os dias selecionados' }, { status: 400 })
     }
 
-    // Insere em lotes de 50 para não estourar o payload
     for (let i = 0; i < rows.length; i += 50) {
       await db.insert(training_sessions).values(rows.slice(i, i + 50))
+    }
+
+    // Atletas são inseridos em todas as ocorrências
+    for (const row of rows) {
+      await insertAthletes(row.id, athlete_ids)
     }
 
     return NextResponse.json({ recurrence_group_id: groupId, count: rows.length }, { status: 201 })
