@@ -16,11 +16,8 @@ const STAFF_ROLES   = ['super_admin', 'tenant_admin', 'coach', 'academy_coach', 
 const COACH_ROLES   = ['tenant_admin', 'coach', 'academy_coach']
 const ATHLETE_ROLES = ['academy_athlete', 'coach_athlete', 'athlete']
 
-// IMPORTANTE: rotas mais específicas devem vir ANTES das mais genéricas
-// Ex: '/coach_athlete' ANTES de '/coach', '/academy_athlete' ANTES de '/academy'
-// O algoritmo já ordena por comprimento (decrescente), mas é boa prática manter a ordem aqui
 const ROUTE_PERMISSIONS = [
-  // ── Rotas exclusivas por role (prefixo = role) — mais específicas primeiro ─
+  // ── Rotas exclusivas por role ────────────────────────────────
   ['/academy_athlete',  ['academy_athlete']],
   ['/coach_athlete',    ['coach_athlete']],
   ['/academy_coach',    ['academy_coach']],
@@ -30,19 +27,22 @@ const ROUTE_PERMISSIONS = [
   ['/recepcionist',     ['receptionist']],
   ['/athlete',          ['athlete']],
 
-  // ── Rotas compartilhadas ──────────────────────────────────────────
+  // ── Rotas compartilhadas ─────────────────────────────────
   ['/academies',        ['super_admin', 'tenant_admin']],
   ['/coaches',          ['super_admin', 'tenant_admin']],
   ['/athletes',         ['tenant_admin', 'academy_coach', 'receptionist']],
   ['/monitoring',       [...COACH_ROLES, ...ATHLETE_ROLES]],
   ['/planning',         COACH_ROLES],
-  ['/sessions',         [...COACH_ROLES, 'receptionist']],
+
+  // sessions: staff gerencia, atletas visualizam as próprias sessões
+  ['/sessions',         [...COACH_ROLES, 'receptionist', ...ATHLETE_ROLES]],
+
   ['/reports',          STAFF_ROLES],
   ['/settings',         ALL_ROLES],
   ['/receptionist',     ['receptionist']],
   ['/daily-logs',       [...COACH_ROLES, ...ATHLETE_ROLES]],
 
-  // ── Rotas globais (todos os autenticados) ────────────────────────
+  // ── Rotas globais ─────────────────────────────────────
   ['/home',             ALL_ROLES],
   ['/profile',          ALL_ROLES],
 ]
@@ -85,9 +85,6 @@ export default withAuth(
     if (PUBLIC_ROUTES.some(r => pathname.startsWith(r))) return NextResponse.next()
     if (!token) return NextResponse.redirect(new URL('/login', req.url))
 
-    // Encontra a rota mais específica (maior prefixo que bate)
-    // O array já está ordenado de mais específico para mais genérico
-    // mas garantimos pegando o de maior comprimento entre os que batem
     const matched = ROUTE_PERMISSIONS
       .filter(([route]) => pathname.startsWith(route))
       .sort((a, b) => b[0].length - a[0].length)[0]
