@@ -5,17 +5,12 @@ import { db } from '@/lib/db/index.js'
 import { training_sessions } from '@/lib/db/schema/sessions'
 import { eq, and, gte } from 'drizzle-orm'
 
-// Converte "2026-03-18T23:00" (datetime-local, sem TZ) para Date
-// sem deslocar o horário para UTC — MySQL datetime não tem TZ,
-// então salvamos exatamente o valor que o usuário digitou.
 function parseDatetimeLocal(str) {
   if (!str) return null
-  // Substitui o 'T' por espaço e passa para o construtor como string
-  // sem sufixo Z — o Node interpreta sem ajuste de fuso.
   const [date, time] = str.split('T')
   const [y, mo, d]  = date.split('-').map(Number)
   const [h, mi]     = (time || '00:00').split(':').map(Number)
-  return new Date(y, mo - 1, d, h, mi, 0, 0)  // horário local do servidor
+  return new Date(y, mo - 1, d, h, mi, 0, 0)
 }
 
 // GET /api/sessions/[id]
@@ -43,25 +38,45 @@ export async function GET(req, { params }) {
 }
 
 // PUT /api/sessions/[id]
+// Roles permitidos: tenant_admin, academy_coach, coach (independente)
 export async function PUT(req, { params }) {
   const session = await getServerSession(authOptions)
   if (!session) return NextResponse.json({ error: 'Não autorizado' }, { status: 401 })
 
   const role = session.user.role
-  if (!['tenant_admin', 'academy_coach'].includes(role)) {
+  if (!['tenant_admin', 'academy_coach', 'coach'].includes(role)) {
     return NextResponse.json({ error: 'Acesso negado' }, { status: 403 })
   }
 
   const { id } = await params
   const body = await req.json()
-  const { name, session_type_id, coach_id, start_datetime, duration_min, capacity, target_zone_min, target_zone_max, notes, status } = body
+  const {
+    name, session_type_id, coach_id,
+    start_datetime, duration_min, capacity,
+    target_zone_min, target_zone_max, notes, status
+  } = body
 
-  if (role === 'academy_coach') {
-    const [existing] = await db.select({ coach_id: training_sessions.coach_id })
-      .from(training_sessions).where(eq(training_sessions.id, id))
-    if (!existing || existing.coach_id !== session.user.id) {
-      return NextResponse.json({ error: 'Acesso negado' }, { status: 403 })
-    }
+  // Busca a sessão para validar ownership
+  const [existing] = await db
+    .select({ coach_id: training_sessions.coach_id, tenant_id: training_sessions.tenant_id })
+    .from(training_sessions)
+    .where(eq(training_sessions.id, id))
+
+  if (!existing) return NextResponse.json({ error: 'Não encontrado' }, { status: 404 })
+
+  // academy_coach: só edita as próprias sessões
+  if (role === 'academy_coach' && existing.coach_id !== session.user.id) {
+    return NextResponse.json({ error: 'Acesso negado' }, { status: 403 })
+  }
+
+  // coach independente: só edita as próprias sessões (tenant_id é null para coach)
+  if (role === 'coach' && existing.coach_id !== session.user.id) {
+    return NextResponse.json({ error: 'Acesso negado' }, { status: 403 })
+  }
+
+  // tenant_admin: só edita sessões do seu tenant
+  if (role === 'tenant_admin' && existing.tenant_id !== session.user.tenant_id) {
+    return NextResponse.json({ error: 'Acesso negado' }, { status: 403 })
   }
 
   const durMin = duration_min || 60
@@ -83,10 +98,7 @@ export async function PUT(req, { params }) {
         notes:           notes || null,
         ...(status ? { status } : {}),
       })
-      .where(and(
-        eq(training_sessions.id, id),
-        eq(training_sessions.tenant_id, session.user.tenant_id)
-      ))
+      .where(eq(training_sessions.id, id))
 
     return NextResponse.json({ ok: true })
   } catch (err) {
@@ -97,14 +109,14 @@ export async function PUT(req, { params }) {
 
 // DELETE /api/sessions/[id]
 // Query params:
-//   ?scope=single   → apaga só esta sessão (default)
-//   ?scope=future   → apaga esta e todas as futuras do mesmo grupo (não apaga status=finished)
+//   ?scope=single  → apaga só esta sessão (default)
+//   ?scope=future  → apaga esta e todas as futuras do mesmo grupo
 export async function DELETE(req, { params }) {
   const session = await getServerSession(authOptions)
   if (!session) return NextResponse.json({ error: 'Não autorizado' }, { status: 401 })
 
   const role = session.user.role
-  if (!['tenant_admin', 'academy_coach'].includes(role)) {
+  if (!['tenant_admin', 'academy_coach', 'coach'].includes(role)) {
     return NextResponse.json({ error: 'Acesso negado' }, { status: 403 })
   }
 
@@ -114,14 +126,15 @@ export async function DELETE(req, { params }) {
 
   const [target] = await db.select()
     .from(training_sessions)
-    .where(and(
-      eq(training_sessions.id, id),
-      eq(training_sessions.tenant_id, session.user.tenant_id)
-    ))
+    .where(eq(training_sessions.id, id))
 
   if (!target) return NextResponse.json({ error: 'Não encontrado' }, { status: 404 })
 
-  if (role === 'academy_coach' && target.coach_id !== session.user.id) {
+  // Valida ownership
+  if ((role === 'academy_coach' || role === 'coach') && target.coach_id !== session.user.id) {
+    return NextResponse.json({ error: 'Acesso negado' }, { status: 403 })
+  }
+  if (role === 'tenant_admin' && target.tenant_id !== session.user.tenant_id) {
     return NextResponse.json({ error: 'Acesso negado' }, { status: 403 })
   }
 
@@ -129,16 +142,12 @@ export async function DELETE(req, { params }) {
     if (scope === 'future' && target.recurrence_group_id) {
       await db.delete(training_sessions)
         .where(and(
-          eq(training_sessions.tenant_id, session.user.tenant_id),
           eq(training_sessions.recurrence_group_id, target.recurrence_group_id),
           gte(training_sessions.start_datetime, target.start_datetime)
         ))
     } else {
       await db.delete(training_sessions)
-        .where(and(
-          eq(training_sessions.id, id),
-          eq(training_sessions.tenant_id, session.user.tenant_id)
-        ))
+        .where(eq(training_sessions.id, id))
     }
 
     return NextResponse.json({ ok: true })

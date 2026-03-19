@@ -16,6 +16,7 @@ import Divider from '@mui/material/Divider'
 import Skeleton from '@mui/material/Skeleton'
 import Tabs from '@mui/material/Tabs'
 import Tab from '@mui/material/Tab'
+import CircularProgress from '@mui/material/CircularProgress'
 
 const STATUS_LABELS = {
   scheduled: { label: 'Agendada',     color: 'primary' },
@@ -32,15 +33,26 @@ function formatDate(dt) {
     weekday: 'long', day: '2-digit', month: 'short', year: 'numeric'
   })
 }
-
 function formatTime(dt) {
   if (!dt) return ''
   return new Date(dt).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })
 }
 
-function SessionDetailDialog({ session: s, open, onClose }) {
+// Verifica se check-in é possível (dia da sessão ou ativa)
+function canCheckIn(s) {
+  if (s.status === 'cancelled' || s.status === 'finished') return false
+  const now   = new Date()
+  const start = new Date(s.start_datetime)
+  const end   = new Date(s.end_datetime)
+  const isToday  = start.toDateString() === now.toDateString()
+  const isActive = now >= start && now < end
+  return isToday || isActive
+}
+
+function SessionDetailDialog({ session: s, open, onClose, onCheckIn, checkInLoading }) {
   if (!s) return null
-  const statusInfo = STATUS_LABELS[s.status] || STATUS_LABELS.scheduled
+  const statusInfo   = STATUS_LABELS[s.status] || STATUS_LABELS.scheduled
+  const checkInOk    = canCheckIn(s)
 
   return (
     <Dialog open={open} onClose={onClose} maxWidth='sm' fullWidth>
@@ -64,43 +76,39 @@ function SessionDetailDialog({ session: s, open, onClose }) {
       <DialogContent dividers>
         <div className='flex flex-col gap-4'>
 
-          {/* Status + tipo */}
+          {/* Status + tipo + check-in */}
           <Box className='flex flex-wrap gap-2'>
             <Chip size='small' label={statusInfo.label} color={statusInfo.color} />
             {s.type_name && <Chip size='small' label={s.type_name} variant='outlined' />}
-            {s.checked_in ? <Chip size='small' label='Check-in realizado' color='success' variant='tonal' /> : null}
+            {s.checked_in
+              ? <Chip size='small' icon={<i className='tabler-circle-check text-sm ml-1' />} label='Check-in realizado' color='success' variant='tonal' />
+              : null
+            }
           </Box>
 
           <Divider />
 
           {/* Data / hora / duração */}
           <div className='grid grid-cols-2 gap-3'>
-            <InfoRow icon='tabler-calendar' label='Data' value={formatDate(s.start_datetime)} />
-            <InfoRow icon='tabler-clock' label='Horário'
-              value={`${formatTime(s.start_datetime)} → ${formatTime(s.end_datetime)}`} />
-            <InfoRow icon='tabler-hourglass' label='Duração' value={`${s.duration_min} min`} />
-            <InfoRow icon='tabler-users' label='Capacidade' value={`${s.capacity} atletas`} />
+            <InfoRow icon='tabler-calendar' label='Data'      value={formatDate(s.start_datetime)} />
+            <InfoRow icon='tabler-clock'    label='Horário'   value={`${formatTime(s.start_datetime)} → ${formatTime(s.end_datetime)}`} />
+            <InfoRow icon='tabler-hourglass' label='Duração'  value={`${s.duration_min} min`} />
+            <InfoRow icon='tabler-users'    label='Capacidade' value={`${s.capacity} atletas`} />
             {s.coach_name && <InfoRow icon='tabler-user' label='Coach' value={s.coach_name} />}
           </div>
 
-          {/* Zonas de FC alvo */}
+          {/* Zonas de FC */}
           {(s.target_zone_min || s.target_zone_max) && (
             <>
               <Divider />
               <div>
-                <Typography variant='caption' color='textSecondary' sx={{ mb: 1, display: 'block' }}>
-                  Zonas de FC alvo
-                </Typography>
-                <Box className='flex gap-2'>
+                <Typography variant='caption' color='textSecondary' sx={{ mb: 1, display: 'block' }}>Zonas de FC alvo</Typography>
+                <Box className='flex gap-2 items-center'>
                   {[s.target_zone_min, s.target_zone_max].filter(Boolean).map((z, i) => (
-                    <Chip
-                      key={i}
-                      size='small'
-                      label={`Z${z}`}
-                      sx={{ background: ZONE_COLORS[z], color: '#fff', fontWeight: 600 }}
-                    />
+                    <Chip key={i} size='small' label={`Z${z}`}
+                      sx={{ background: ZONE_COLORS[z], color: '#fff', fontWeight: 600 }} />
                   ))}
-                  <Typography variant='caption' color='textSecondary' className='self-center'>
+                  <Typography variant='caption' color='textSecondary'>
                     {s.target_zone_min === s.target_zone_max
                       ? `Zona ${s.target_zone_min}`
                       : `Zona ${s.target_zone_min} a Z${s.target_zone_max}`}
@@ -115,9 +123,7 @@ function SessionDetailDialog({ session: s, open, onClose }) {
             <>
               <Divider />
               <div>
-                <Typography variant='caption' color='textSecondary' sx={{ mb: 0.5, display: 'block' }}>
-                  Notas do coach
-                </Typography>
+                <Typography variant='caption' color='textSecondary' sx={{ mb: 0.5, display: 'block' }}>Notas do coach</Typography>
                 <Typography variant='body2'>{s.notes}</Typography>
               </div>
             </>
@@ -125,8 +131,23 @@ function SessionDetailDialog({ session: s, open, onClose }) {
         </div>
       </DialogContent>
 
-      <DialogActions sx={{ p: 2 }}>
+      <DialogActions sx={{ p: 2, gap: 1 }}>
         <Button variant='outlined' onClick={onClose}>Fechar</Button>
+        {checkInOk && (
+          <Button
+            variant='contained'
+            color={s.checked_in ? 'error' : 'success'}
+            onClick={() => onCheckIn(s)}
+            disabled={checkInLoading}
+            startIcon={
+              checkInLoading
+                ? <CircularProgress size={16} color='inherit' />
+                : <i className={`tabler-${s.checked_in ? 'x' : 'circle-check'} text-sm`} />
+            }
+          >
+            {s.checked_in ? 'Desfazer check-in' : 'Fazer check-in'}
+          </Button>
+        )}
       </DialogActions>
     </Dialog>
   )
@@ -146,7 +167,6 @@ function InfoRow({ icon, label, value }) {
 
 function SessionCard({ session: s, onDetail }) {
   const statusInfo = STATUS_LABELS[s.status] || STATUS_LABELS.scheduled
-  const isPast     = new Date(s.start_datetime) < new Date()
 
   return (
     <Card
@@ -161,11 +181,12 @@ function SessionCard({ session: s, onDetail }) {
       <CardContent sx={{ p: '14px 16px !important' }}>
         <Box className='flex items-center justify-between gap-2 flex-wrap'>
 
-          {/* Lado esquerdo: data + nome + tipo */}
+          {/* Lado esquerdo */}
           <Box className='flex items-center gap-3 min-w-0'>
-            {/* Bloco de data */}
-            <Box className='flex flex-col items-center justify-center rounded-lg px-2 py-1 min-w-[48px]'
-              sx={{ background: 'var(--mui-palette-action-hover)' }}>
+            <Box
+              className='flex flex-col items-center justify-center rounded-lg px-2 py-1 min-w-[48px]'
+              sx={{ background: 'var(--mui-palette-action-hover)' }}
+            >
               <Typography variant='caption' color='textSecondary' sx={{ lineHeight: 1 }}>
                 {new Date(s.start_datetime).toLocaleDateString('pt-BR', { weekday: 'short' }).replace('.', '')}
               </Typography>
@@ -177,9 +198,13 @@ function SessionCard({ session: s, onDetail }) {
               </Typography>
             </Box>
 
-            {/* Info */}
             <Box className='min-w-0'>
-              <Typography variant='body1' className='font-semibold truncate'>{s.name}</Typography>
+              <Box className='flex items-center gap-2'>
+                <Typography variant='body1' className='font-semibold truncate'>{s.name}</Typography>
+                {s.checked_in ? (
+                  <i className='tabler-circle-check text-success text-base' title='Check-in realizado' />
+                ) : null}
+              </Box>
               <Box className='flex flex-wrap items-center gap-1 mt-0.5'>
                 <Typography variant='caption' color='textSecondary'>
                   <i className='tabler-clock text-xs mr-0.5' />
@@ -195,19 +220,14 @@ function SessionCard({ session: s, onDetail }) {
             </Box>
           </Box>
 
-          {/* Lado direito: tipo + status + botão */}
+          {/* Lado direito */}
           <Box className='flex items-center gap-2 flex-shrink-0'>
             {s.type_name && (
-              <Chip
-                size='small'
-                label={s.type_name}
-                variant='tonal'
-                sx={{ background: s.type_color ? `${s.type_color}22` : undefined, color: s.type_color }}
-              />
+              <Chip size='small' label={s.type_name} variant='tonal'
+                sx={{ background: s.type_color ? `${s.type_color}22` : undefined, color: s.type_color }} />
             )}
             <Chip size='small' label={statusInfo.label} color={statusInfo.color} />
-            <Button
-              size='small' variant='outlined'
+            <Button size='small' variant='outlined'
               startIcon={<i className='tabler-eye text-sm' />}
               onClick={() => onDetail(s)}
             >
@@ -221,10 +241,11 @@ function SessionCard({ session: s, onDetail }) {
 }
 
 export default function SessionsAthleteView() {
-  const [sessions, setSessions] = useState([])
-  const [loading, setLoading]   = useState(true)
-  const [tab, setTab]           = useState(0)         // 0 = próximas, 1 = passadas
-  const [detail, setDetail]     = useState(null)
+  const [sessions, setSessions]           = useState([])
+  const [loading, setLoading]             = useState(true)
+  const [tab, setTab]                     = useState(0)
+  const [detail, setDetail]               = useState(null)
+  const [checkInLoading, setCheckInLoading] = useState(false)
 
   const fetchSessions = useCallback(async () => {
     setLoading(true)
@@ -238,10 +259,32 @@ export default function SessionsAthleteView() {
 
   useEffect(() => { fetchSessions() }, [fetchSessions])
 
+  const handleCheckIn = useCallback(async (s) => {
+    setCheckInLoading(true)
+    try {
+      const res  = await fetch(`/api/sessions/${s.id}/checkin`, { method: 'PUT' })
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.error || 'Erro ao fazer check-in')
+
+      // Atualiza localmente sem refetch completo
+      setSessions(prev => prev.map(item =>
+        item.id === s.id ? { ...item, checked_in: data.checked_in } : item
+      ))
+      // Atualiza o modal também
+      setDetail(prev => prev ? { ...prev, checked_in: data.checked_in } : prev)
+    } catch (err) {
+      alert(err.message)
+    } finally {
+      setCheckInLoading(false)
+    }
+  }, [])
+
   const now      = new Date()
-  const upcoming = sessions.filter(s => new Date(s.start_datetime) >= now && s.status !== 'cancelled')
+  const upcoming = sessions
+    .filter(s => new Date(s.start_datetime) >= now && s.status !== 'cancelled')
     .sort((a, b) => new Date(a.start_datetime) - new Date(b.start_datetime))
-  const past     = sessions.filter(s => new Date(s.start_datetime) < now || s.status === 'finished' || s.status === 'cancelled')
+  const past = sessions
+    .filter(s => new Date(s.start_datetime) < now || s.status === 'finished' || s.status === 'cancelled')
     .sort((a, b) => new Date(b.start_datetime) - new Date(a.start_datetime))
 
   const listed = tab === 0 ? upcoming : past
@@ -274,18 +317,14 @@ export default function SessionsAthleteView() {
         </div>
       ) : listed.length === 0 ? (
         <Box className='flex flex-col items-center justify-center py-16 gap-3'>
-          <i className={`${
-            tab === 0 ? 'tabler-calendar-off' : 'tabler-history'
-          } text-5xl text-secondary opacity-40`} />
+          <i className={`${tab === 0 ? 'tabler-calendar-off' : 'tabler-history'} text-5xl text-secondary opacity-40`} />
           <Typography variant='body1' color='textSecondary'>
             {tab === 0 ? 'Nenhuma sessão agendada' : 'Nenhuma sessão no histórico'}
           </Typography>
         </Box>
       ) : (
         <div className='flex flex-col gap-3'>
-          {listed.map(s => (
-            <SessionCard key={s.id} session={s} onDetail={setDetail} />
-          ))}
+          {listed.map(s => <SessionCard key={s.id} session={s} onDetail={setDetail} />)}
         </div>
       )}
 
@@ -294,6 +333,8 @@ export default function SessionsAthleteView() {
         session={detail}
         open={!!detail}
         onClose={() => setDetail(null)}
+        onCheckIn={handleCheckIn}
+        checkInLoading={checkInLoading}
       />
     </Box>
   )
