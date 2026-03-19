@@ -1,7 +1,7 @@
 import { mysqlTable, varchar, text, tinyint, timestamp, datetime, int, float, mysqlEnum, date } from 'drizzle-orm/mysql-core'
 
 // ───────────────────────────────────────────────────────────────────
-// SESSION_TYPES — modalidades de aula (Spinning, CrossFit, Funcional...)
+// SESSION_TYPES
 // ───────────────────────────────────────────────────────────────────
 export const session_types = mysqlTable('session_types', {
   id:         varchar('id', { length: 36 }).primaryKey(),
@@ -13,11 +13,12 @@ export const session_types = mysqlTable('session_types', {
 })
 
 // ───────────────────────────────────────────────────────────────────
-// TRAINING_SESSIONS — cada aula/treino agendado ou realizado
+// TRAINING_SESSIONS
+// tenant_id é NULL para coaches independentes (role = 'coach')
 // ───────────────────────────────────────────────────────────────────
 export const training_sessions = mysqlTable('training_sessions', {
   id:                   varchar('id', { length: 36 }).primaryKey(),
-  tenant_id:            varchar('tenant_id', { length: 36 }).notNull(),
+  tenant_id:            varchar('tenant_id', { length: 36 }),            // NULL para coach independente
   unit_id:              varchar('unit_id', { length: 36 }),
   session_type_id:      varchar('session_type_id', { length: 36 }),
   coach_id:             varchar('coach_id', { length: 36 }).notNull(),
@@ -30,11 +31,9 @@ export const training_sessions = mysqlTable('training_sessions', {
   target_zone_min:      int('target_zone_min').default(2),
   target_zone_max:      int('target_zone_max').default(4),
   notes:                text('notes'),
-  // Recorrência
-  recurrence_group_id:  varchar('recurrence_group_id', { length: 36 }),  // UUID comum a todas as ocorrências
-  recurrence_rule:      varchar('recurrence_rule', { length: 50 }),       // ex: "MON,WED,FRI"
-  recurrence_end_date:  date('recurrence_end_date'),                      // até quando repetir
-  // Métricas calculadas pós-sessão
+  recurrence_group_id:  varchar('recurrence_group_id', { length: 36 }),
+  recurrence_rule:      varchar('recurrence_rule', { length: 50 }),
+  recurrence_end_date:  date('recurrence_end_date'),
   avg_hr:               int('avg_hr'),
   avg_calories:         int('avg_calories'),
   participants_count:   int('participants_count'),
@@ -43,7 +42,7 @@ export const training_sessions = mysqlTable('training_sessions', {
 })
 
 // ───────────────────────────────────────────────────────────────────
-// SESSION_ATHLETES — quais atletas participaram de cada sessão
+// SESSION_ATHLETES
 // ───────────────────────────────────────────────────────────────────
 export const session_athletes = mysqlTable('session_athletes', {
   id:              varchar('id', { length: 36 }).primaryKey(),
@@ -66,7 +65,7 @@ export const session_athletes = mysqlTable('session_athletes', {
 })
 
 // ───────────────────────────────────────────────────────────────────
-// SESSION_HR_SERIES — série temporal de FC
+// SESSION_HR_SERIES
 // ───────────────────────────────────────────────────────────────────
 export const session_hr_series = mysqlTable('session_hr_series', {
   id:           varchar('id', { length: 36 }).primaryKey(),

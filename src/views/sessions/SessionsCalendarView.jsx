@@ -12,6 +12,7 @@ import ptBrLocale from '@fullcalendar/core/locales/pt-br'
 import AppFullCalendar from '@/libs/styles/AppFullCalendar'
 import SidebarLeft from './SidebarLeft'
 import SessionDrawer from './SessionDrawer'
+import NodusToast from '@/components/NodusToast'
 
 const colorToClass = color => {
   const map = {
@@ -20,7 +21,7 @@ const colorToClass = color => {
     '#ea5455': 'error',   '#ef4444': 'error',
     '#ff9f43': 'warning', '#f59e0b': 'warning',
     '#00cfe8': 'info',    '#06b6d4': 'info',
-    '#64748b': 'secondary','#82868b': 'secondary',
+    '#64748b': 'secondary', '#82868b': 'secondary',
   }
   return map[color?.toLowerCase()] ?? 'primary'
 }
@@ -58,6 +59,10 @@ export default function SessionsCalendarView() {
   const [leftSidebarOpen, setLeftSidebarOpen] = useState(false)
   const [activeTypes, setActiveTypes]         = useState([])
   const [clickedDate, setClickedDate]         = useState(null)
+  const [toast, setToast]                     = useState({ open: false, message: '', severity: 'success' })
+
+  const showToast = (message, severity = 'success') =>
+    setToast({ open: true, message, severity })
 
   const fetchSessions = useCallback(async () => {
     try {
@@ -89,79 +94,125 @@ export default function SessionsCalendarView() {
   }
 
   const handleEventDrop = async ({ event }) => {
-    await fetch(`/api/sessions/${event.id}`, {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ ...event.extendedProps, start_datetime: event.start?.toISOString().slice(0,16), end_datetime: event.end }),
-    })
-    fetchSessions()
+    try {
+      const res = await fetch(`/api/sessions/${event.id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          ...event.extendedProps,
+          start_datetime: event.start?.toISOString().slice(0, 16),
+          end_datetime:   event.end,
+        }),
+      })
+      if (!res.ok) throw new Error()
+      showToast('Sessão reagendada com sucesso!')
+    } catch {
+      showToast('Erro ao reagendar sessão.', 'error')
+    } finally {
+      fetchSessions()
+    }
   }
 
   const handleSave = async data => {
     const isEdit = !!data.id
-    await fetch(isEdit ? `/api/sessions/${data.id}` : '/api/sessions', {
-      method: isEdit ? 'PUT' : 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(data),
-    })
-    setDrawerOpen(false)
-    setSelectedSession(null)
-    fetchSessions()
+    try {
+      const res = await fetch(isEdit ? `/api/sessions/${data.id}` : '/api/sessions', {
+        method: isEdit ? 'PUT' : 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(data),
+      })
+      const json = await res.json()
+      if (!res.ok) throw new Error(json.error ?? 'Erro desconhecido')
+
+      if (isEdit) {
+        showToast('Sessão atualizada com sucesso!')
+      } else if (json.count) {
+        showToast(`${json.count} sessões recorrentes criadas com sucesso!`)
+      } else {
+        showToast('Sessão criada com sucesso!')
+      }
+
+      setDrawerOpen(false)
+      setSelectedSession(null)
+      fetchSessions()
+    } catch (err) {
+      showToast(err.message || 'Erro ao salvar sessão.', 'error')
+    }
   }
 
   const handleDelete = async (id, scope = 'single') => {
-    await fetch(`/api/sessions/${id}?scope=${scope}`, { method: 'DELETE' })
-    setDrawerOpen(false)
-    setSelectedSession(null)
-    fetchSessions()
+    try {
+      const res = await fetch(`/api/sessions/${id}?scope=${scope}`, { method: 'DELETE' })
+      if (!res.ok) throw new Error()
+      showToast(
+        scope === 'future'
+          ? 'Sessão e próximas ocorrências excluídas!'
+          : 'Sessão excluída com sucesso!'
+      )
+    } catch {
+      showToast('Erro ao excluir sessão.', 'error')
+    } finally {
+      setDrawerOpen(false)
+      setSelectedSession(null)
+      fetchSessions()
+    }
   }
 
   return (
-    <AppFullCalendar className='overflow-hidden rounded border border-divider bg-backgroundPaper'>
-      <SidebarLeft
-        mdAbove={mdAbove}
-        leftSidebarOpen={leftSidebarOpen}
-        sessionTypes={sessionTypes}
-        activeTypes={activeTypes}
-        setActiveTypes={setActiveTypes}
-        calendarRef={calendarRef}
-        handleLeftSidebarToggle={() => setLeftSidebarOpen(v => !v)}
-        handleNewSession={() => { setSelectedSession(null); setClickedDate(null); setDrawerOpen(true) }}
-      />
-
-      <div className='pbs-6 pbe-0 pis-6 pie-6 grow overflow-hidden'>
-        <FullCalendar
-          ref={calendarRef}
-          plugins={[dayGridPlugin, timeGridPlugin, interactionPlugin, listPlugin]}
-          initialView='dayGridMonth'
-          locale={ptBrLocale}
-          buttonText={{ today: 'Hoje', month: 'Mês', week: 'Semana', day: 'Dia', list: 'Lista' }}
-          allDayText='Dia inteiro'
-          headerToolbar={{
-            start: 'prev,next title',
-            end:   'dayGridMonth,timeGridWeek,timeGridDay,listMonth'
-          }}
-          height='100%'
-          events={filteredEvents}
-          editable droppable navLinks
-          dayMaxEvents={3}
-          eventResizableFromStart
-          direction={theme.direction}
-          dateClick={info => { setSelectedSession(null); setClickedDate(info.dateStr); setDrawerOpen(true) }}
-          eventClick={handleEventClick}
-          eventDrop={handleEventDrop}
+    <>
+      <AppFullCalendar className='overflow-hidden rounded border border-divider bg-backgroundPaper'>
+        <SidebarLeft
+          mdAbove={mdAbove}
+          leftSidebarOpen={leftSidebarOpen}
+          sessionTypes={sessionTypes}
+          activeTypes={activeTypes}
+          setActiveTypes={setActiveTypes}
+          calendarRef={calendarRef}
+          handleLeftSidebarToggle={() => setLeftSidebarOpen(v => !v)}
+          handleNewSession={() => { setSelectedSession(null); setClickedDate(null); setDrawerOpen(true) }}
         />
-      </div>
 
-      <SessionDrawer
-        open={drawerOpen}
-        session={selectedSession}
-        sessionTypes={sessionTypes}
-        defaultDate={clickedDate}
-        onClose={() => { setDrawerOpen(false); setSelectedSession(null) }}
-        onSave={handleSave}
-        onDelete={handleDelete}
+        <div className='pbs-6 pbe-0 pis-6 pie-6 grow overflow-hidden'>
+          <FullCalendar
+            ref={calendarRef}
+            plugins={[dayGridPlugin, timeGridPlugin, interactionPlugin, listPlugin]}
+            initialView='dayGridMonth'
+            locale={ptBrLocale}
+            buttonText={{ today: 'Hoje', month: 'Mês', week: 'Semana', day: 'Dia', list: 'Lista' }}
+            allDayText='Dia inteiro'
+            headerToolbar={{
+              start: 'prev,next title',
+              end:   'dayGridMonth,timeGridWeek,timeGridDay,listMonth'
+            }}
+            height='100%'
+            events={filteredEvents}
+            editable droppable navLinks
+            dayMaxEvents={3}
+            eventResizableFromStart
+            direction={theme.direction}
+            dateClick={info => { setSelectedSession(null); setClickedDate(info.dateStr); setDrawerOpen(true) }}
+            eventClick={handleEventClick}
+            eventDrop={handleEventDrop}
+          />
+        </div>
+
+        <SessionDrawer
+          open={drawerOpen}
+          session={selectedSession}
+          sessionTypes={sessionTypes}
+          defaultDate={clickedDate}
+          onClose={() => { setDrawerOpen(false); setSelectedSession(null) }}
+          onSave={handleSave}
+          onDelete={handleDelete}
+        />
+      </AppFullCalendar>
+
+      <NodusToast
+        open={toast.open}
+        message={toast.message}
+        severity={toast.severity}
+        onClose={() => setToast(t => ({ ...t, open: false }))}
       />
-    </AppFullCalendar>
+    </>
   )
 }
