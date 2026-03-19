@@ -17,7 +17,7 @@
 | Gráficos | ApexCharts (react-apexcharts) |
 | Hardware | ANT+ USB via WebSocket |
 | Changelog | release-it + @release-it/conventional-changelog |
-| Deploy | (a definir) |
+| Deploy | VPS (Hetzner CX22 recomendado) — ver seção Infraestrutura |
 
 ---
 
@@ -247,14 +247,75 @@
 
 ---
 
-## 🔲 FASE 5.1 — Dados Reais nos Dashboards (próximo passo)
+## ✅ FASE 5.1 — Dashboards com Dados Reais (Concluída — 18/03/2026)
 
-> Substituir os dados `const` simulados por fetch da API real em cada dashboard.
+- [x] `GET /api/dashboard/athlete` — sessões no mês, calorias, streak, ranking, próxima sessão, ACWR, progresso
+  - Aceita roles: `athlete`, `academy_athlete`, `coach_athlete`
+- [x] `GET /api/dashboard/coach` — alunos, sessões do dia, ACWR médio, alertas, top atletas
+- [x] `GET /api/dashboard/academia` — atletas ativos, sessões do dia, FC média, calorias, alertas, zonas, presença semanal
+- [x] Hook `useDashboard(type)` — fetch client-side com loading/error states
+- [x] `DashboardAthlete`, `DashboardCoach`, `DashboardAcademia` conectados às APIs reais
 
-- [ ] `GET /api/dashboard/academia` — atletas ativos, sessões do dia, FC média, calorias, alertas, zonas, presença semanal, top atletas
-- [ ] `GET /api/dashboard/coach` — alunos do coach, sessões do dia, FC média do grupo, ACWR médio, alertas, top atletas
-- [ ] `GET /api/dashboard/athlete` — sessões no mês, calorias, streak, ranking, próxima sessão, ACWR, progresso
-- [ ] Conectar `DashboardAcademia`, `DashboardCoach`, `DashboardAthlete` às APIs reais
+---
+
+## ✅ FASE 5.2 — Correções de Role no Dashboard (Concluída — 18/03/2026)
+
+> Bugs encontrados ao testar os perfis `academy_athlete`, `coach_athlete` e `academy_coach`.
+
+- [x] `home/page.jsx` — faltavam cases para `academy_athlete`, `coach_athlete` e `academy_coach`
+  - Todos caíam no fallback `<DashboardAcademia />` → chamava `/api/dashboard/academia` → **403**
+  - Corrigido: `academy_athlete` + `coach_athlete` → `DashboardAthlete` | `academy_coach` → `DashboardCoach`
+- [x] `middleware.js` — rota `/sessions` não permitia `ATHLETE_ROLES`
+  - Botão "Ver Detalhes da Sessão" no `DashboardAthlete` redirecionava para 403
+  - Corrigido: `ATHLETE_ROLES` adicionado à permissão de `/sessions`
+
+---
+
+## ✅ FASE 6 — Módulo Sessões de Treino (Parcialmente Concluída — 19/03/2026)
+
+### API
+- [x] `GET /api/sessions` — consciente do role:
+  - **Staff** (coach, academy_coach, tenant_admin): retorna todas as sessões do tenant/coach
+  - **Atleta** (athlete, academy_athlete, coach_athlete): retorna **apenas as sessões em que está inscrito** via `session_athletes`, com campo `checked_in`
+- [x] `POST /api/sessions` — criação com suporte a recorrência (dias da semana + data fim)
+  - Insere em lotes de 50 para evitar timeout
+  - Vincula `athlete_ids` via `session_athletes` automaticamente
+- [x] **Status calculado on-the-fly** — função `computeStatus(row)` na API (Opção A)
+  - `cancelled` → sempre preservado (manual)
+  - `active` → `start_datetime <= NOW() < end_datetime`
+  - `finished` → `NOW() >= end_datetime`
+  - `scheduled` → padrão (ainda não começou)
+  - ⚠️ **TODO (Fase 16/deploy):** migrar para Opção B — cron job `GET /api/cron/sessions-status` rodando a cada 5 min no servidor, atualizando o banco diretamente. Ver seção Infraestrutura.
+
+### Views
+- [x] `SessionsCalendarView` — calendário FullCalendar para staff (coach, admin, receptionist)
+- [x] `SessionsAthleteView` — lista de sessões para atletas (nova — 19/03/2026)
+  - Tabs "Próximas" / "Histórico" separados por data
+  - Card por sessão com bloco de data visual, horário, duração, coach, tipo de treino
+  - Modal de detalhes com: data, horário, duração, capacidade, coach, zonas de FC alvo (cores Z1–Z5), notas do coach
+  - Chip "Check-in realizado" quando `checked_in = 1`
+  - Estado vazio amigável em cada tab + botão de refresh manual
+- [x] `sessions/page.jsx` — renderiza view correta por role:
+  - `athlete / academy_athlete / coach_athlete` → `SessionsAthleteView`
+  - Demais roles → `SessionsCalendarView`
+
+### Pendente nesta fase
+- [ ] `PUT /api/sessions/[id]` — edição de sessão
+- [ ] `DELETE /api/sessions/[id]` — cancelamento/exclusão
+- [ ] Cancelamento manual de sessão pelo coach (chip `cancelled` já suportado na view)
+- [ ] Check-in do atleta (`PUT /api/sessions/[id]/checkin`)
+- [ ] Histórico de sessões no perfil do atleta (`AthleteDetailView`)
+
+---
+
+## 🔲 FASE 5.1 Upload de Avatar (pendente)
+
+> O campo `avatar_url varchar(255)` já existe no schema `users`.
+
+- [ ] API `POST /api/upload/avatar` — recebe `multipart/form-data`, salva em `/public/uploads/avatars/`
+- [ ] Componente `AvatarUpload` — clique no avatar abre seletor de arquivo, preview + botão salvar
+- [ ] Integrar em `ClientDetailView`, `CoachDetailView`, `AthleteDetailView`
+- [ ] Dependência necessária: `formidable` ou `busboy` para parse do multipart
 
 ---
 
@@ -270,28 +331,6 @@
 - [ ] Botão "Personalizar Dashboard" na navbar ou no canto do dashboard
 - [ ] Cards disponíveis por role (ex: atleta não vê cards financeiros)
 - [ ] Reset para layout padrão
-
----
-
-## 🔲 FASE 5.1 Upload de Avatar (pendente)
-
-> O campo `avatar_url varchar(255)` já existe no schema `users`.
-
-- [ ] API `POST /api/upload/avatar` — recebe `multipart/form-data`, salva em `/public/uploads/avatars/`
-- [ ] Componente `AvatarUpload` — clique no avatar abre seletor de arquivo, preview + botão salvar
-- [ ] Integrar em `ClientDetailView`, `CoachDetailView`, `AthleteDetailView`
-- [ ] Dependência necessária: `formidable` ou `busboy` para parse do multipart
-
----
-
-## 🔲 FASE 6 — Módulo Sessões de Treino
-
-- [ ] Validar campos da tabela `training_sessions` existente
-- [ ] `GET/POST /api/sessions` — listagem e criação
-- [ ] `PUT/DELETE /api/sessions/[id]`
-- [ ] Tela `/sessions` — agenda com calendário e lista
-- [ ] Modal de criação de sessão (data, hora, tipo, coach, atletas)
-- [ ] Histórico de sessões por atleta
 
 ---
 
@@ -402,12 +441,58 @@
 
 ---
 
-## 🔲 FASE 16 — Produção
+## 🔲 FASE 16 — Produção e Deploy
 
-- [ ] Definir provedor de deploy (Vercel, Railway, VPS)
-- [ ] Variáveis de ambiente de produção
-- [ ] Banco de dados de produção (PlanetScale ou MySQL gerenciado)
-- [ ] CI/CD pipeline
+> Decisão de infraestrutura tomada em 19/03/2026.
+
+### Infraestrutura escolhida: VPS (Hetzner CX22)
+
+| Critério | Decisão |
+|---|---|
+| Servidor | **Hetzner CX22** — 2 vCPU, 4 GB RAM, 40 GB SSD, ~€ 3,79/mês |
+| App | Next.js rodando via **PM2** (processo persistente) |
+| Proxy reverso | **Nginx** + Certbot (HTTPS gratuito via Let's Encrypt) |
+| Banco de dados | **MySQL 8** local no VPS (não exposto externamente) |
+| Deploy automático | **GitHub Actions** — `git push main` → deploy no servidor |
+| Cron de sessões | **crontab** no servidor — a cada 5 min (Opção B, ver abaixo) |
+| Domínio | Domínio próprio (~R$ 40/ano no Registro.br para `.com.br`) |
+| Backup | MySQL dump automático para bucket S3 ou Cloudflare R2 |
+| **Custo total** | **~R$ 25–35/mês** |
+
+### Por que não Vercel
+- WebSocket não suportado (obrigatório para ANT+/monitoramento em tempo real)
+- MySQL precisa de banco externo (custo adicional)
+- Cold start em serverless prejudica UX
+- Plano Pro: $20/mês por usuário — inviável para SaaS multi-tenant
+
+### Por que não InfinityFree
+- Hospedagem PHP/cPanel — **não roda Node.js / Next.js**
+- Sem suporte a WebSocket
+- MySQL não aceita conexões externas
+
+### Por que não Railway (como opção definitiva)
+- Boa opção gerenciada, mas custo imprevisível em picos
+- Menos autonomia que VPS
+- Recomendado apenas como ambiente de teste/staging antes da migração para VPS
+
+### Status do cron de sessões
+
+| Opção | Status | Quando usar |
+|---|---|---|
+| **Opção A** — `computeStatus()` on-the-fly na API | ✅ **Ativo agora** | Desenvolvimento / sem servidor ainda |
+| **Opção B** — cron job `GET /api/cron/sessions-status` a cada 5 min | 🔲 Pendente | Ao fazer deploy no VPS |
+
+> A Opção A já está implementada em `GET /api/sessions` — status calculado na hora do fetch, banco não é atualizado. Funciona perfeitamente para desenvolvimento local e testes.
+> A Opção B será implementada junto com o GitHub Actions de deploy (Fase 16).
+
+### Checklist de deploy (pendente — após MVP)
+- [ ] Provisionar VPS Hetzner CX22
+- [ ] Instalar Node.js 20 LTS + PM2 + Nginx + MySQL 8 + Certbot
+- [ ] Configurar `.env` de produção
+- [ ] Configurar GitHub Actions para deploy automático via SSH
+- [ ] Configurar crontab para `GET /api/cron/sessions-status` (Opção B)
+- [ ] Configurar backup automático MySQL
+- [ ] Apontar domínio e emitir certificado SSL
 - [ ] Testes E2E (Playwright ou Cypress)
 - [ ] Monitoramento de erros (Sentry)
 
@@ -479,8 +564,13 @@
 - Gráficos: sempre via `AppReactApexCharts` com `dynamic import` (SSR: false)
 - StatCards: usar `<StatCard>` com `CustomAvatar` rounded + `<Chip variant='tonal'>` para trend
 - Layout: `contentWidth: 'wide'` no themeConfig — nunca `'compact'` (quebra o Grid)
-- Dados simulados: marcados com comentário `// substituir por fetch da API (Fase 5.1 real)`
+
+### Status de Sessão (como funciona)
+- O banco **sempre** armazena o status original (`scheduled`, `cancelled`)
+- A API sobrescreve o status na resposta usando `computeStatus()` (Opção A, ativo agora)
+- `cancelled` é imutável — só pode ser definido manualmente pelo coach via `PUT /api/sessions/[id]`
+- Na Fase 16 (deploy), migrar para Opção B: cron atualizando o banco diretamente
 
 ---
 
-*Última atualização: 17/03/2026*
+*Última atualização: 19/03/2026*

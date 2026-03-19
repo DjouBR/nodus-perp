@@ -4,11 +4,27 @@ import { authOptions } from '@/libs/auth'
 import { db } from '@/lib/db/index.js'
 import { training_sessions, session_types, session_athletes } from '@/lib/db/schema/sessions'
 import { users } from '@/lib/db/schema/users'
-import { eq, and, gte, or, isNull, desc } from 'drizzle-orm'
+import { eq, desc } from 'drizzle-orm'
 import { randomUUID } from 'crypto'
 
 const STAFF_ROLES   = ['tenant_admin', 'academy_coach', 'coach']
 const ATHLETE_ROLES = ['athlete', 'academy_athlete', 'coach_athlete']
+
+/**
+ * Calcula o status real da sessão com base nos horários.
+ * OPÇÃO A — on-the-fly (sem atualizar o banco).
+ * TODO (Fase 16): substituir por Opção B — cron job que atualiza o banco a cada 5 min.
+ * O status 'cancelled' é sempre preservado (definido manualmente pelo coach).
+ */
+function computeStatus(row) {
+  if (row.status === 'cancelled') return 'cancelled'
+  const now   = Date.now()
+  const start = new Date(row.start_datetime).getTime()
+  const end   = new Date(row.end_datetime).getTime()
+  if (now >= start && now < end)  return 'active'
+  if (now >= end)                 return 'finished'
+  return 'scheduled'
+}
 
 function tenantFilter(user) {
   if (user.role === 'coach') return eq(training_sessions.coach_id, user.id)
@@ -20,7 +36,7 @@ export async function GET(req) {
   const session = await getServerSession(authOptions)
   if (!session) return NextResponse.json({ error: 'Não autorizado' }, { status: 401 })
 
-  const { role, id: userId, tenant_id: tenantId } = session.user
+  const { role, id: userId } = session.user
 
   try {
     // ── Atleta: retorna apenas as suas próprias sessões (via session_athletes) ──
@@ -53,7 +69,7 @@ export async function GET(req) {
         .where(eq(session_athletes.athlete_id, userId))
         .orderBy(desc(training_sessions.start_datetime))
 
-      return NextResponse.json(rows)
+      return NextResponse.json(rows.map(r => ({ ...r, status: computeStatus(r) })))
     }
 
     // ── Staff: retorna todas as sessões do tenant/coach ──
@@ -87,7 +103,7 @@ export async function GET(req) {
       .leftJoin(session_types, eq(training_sessions.session_type_id, session_types.id))
       .where(tenantFilter(session.user))
 
-    return NextResponse.json(sessions)
+    return NextResponse.json(sessions.map(r => ({ ...r, status: computeStatus(r) })))
   } catch (err) {
     console.error('[GET /api/sessions]', err)
     return NextResponse.json({ error: 'Erro ao buscar sessões' }, { status: 500 })
@@ -118,10 +134,10 @@ export async function POST(req) {
     return NextResponse.json({ error: 'Campos obrigatórios ausentes' }, { status: 400 })
   }
 
-  const finalCoachId   = (role === 'academy_coach' || role === 'coach') ? userId : (coach_id || userId)
-  const finalTenantId  = role === 'coach' ? null : tenantId
-  const durMin         = duration_min || 60
-  const DAY_MAP        = { SUN: 0, MON: 1, TUE: 2, WED: 3, THU: 4, FRI: 5, SAT: 6 }
+  const finalCoachId  = (role === 'academy_coach' || role === 'coach') ? userId : (coach_id || userId)
+  const finalTenantId = role === 'coach' ? null : tenantId
+  const durMin        = duration_min || 60
+  const DAY_MAP       = { SUN: 0, MON: 1, TUE: 2, WED: 3, THU: 4, FRI: 5, SAT: 6 }
 
   const buildRow = (start, groupId = null) => ({
     id:                   randomUUID(),
