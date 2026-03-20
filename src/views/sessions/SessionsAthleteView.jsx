@@ -18,8 +18,10 @@ import Tabs from '@mui/material/Tabs'
 import Tab from '@mui/material/Tab'
 import CircularProgress from '@mui/material/CircularProgress'
 
+// Status labels por role-aware: atleta vê 'Aberta', staff vê 'Confirmada'
+// Este componente é exclusivo de atletas → sempre 'Aberta'
 const STATUS_LABELS = {
-  scheduled: { label: 'Agendada',     color: 'primary' },
+  scheduled: { label: 'Aberta',       color: 'primary' },
   active:    { label: 'Em andamento', color: 'success' },
   finished:  { label: 'Finalizada',   color: 'default' },
   cancelled: { label: 'Cancelada',    color: 'error'   },
@@ -38,7 +40,6 @@ function formatTime(dt) {
   return new Date(dt).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })
 }
 
-// Verifica se check-in é possível (dia da sessão ou ativa)
 function canCheckIn(s) {
   if (s.status === 'cancelled' || s.status === 'finished') return false
   const now   = new Date()
@@ -51,8 +52,8 @@ function canCheckIn(s) {
 
 function SessionDetailDialog({ session: s, open, onClose, onCheckIn, checkInLoading }) {
   if (!s) return null
-  const statusInfo   = STATUS_LABELS[s.status] || STATUS_LABELS.scheduled
-  const checkInOk    = canCheckIn(s)
+  const statusInfo = STATUS_LABELS[s.status] || STATUS_LABELS.scheduled
+  const checkInOk  = canCheckIn(s)
 
   return (
     <Dialog open={open} onClose={onClose} maxWidth='sm' fullWidth>
@@ -60,10 +61,7 @@ function SessionDetailDialog({ session: s, open, onClose, onCheckIn, checkInLoad
         <Box className='flex items-center justify-between'>
           <Box className='flex items-center gap-2'>
             {s.type_color && (
-              <span style={{
-                width: 12, height: 12, borderRadius: '50%',
-                background: s.type_color, display: 'inline-block', flexShrink: 0
-              }} />
+              <span style={{ width: 12, height: 12, borderRadius: '50%', background: s.type_color, display: 'inline-block', flexShrink: 0 }} />
             )}
             <Typography variant='h6' component='span'>{s.name}</Typography>
           </Box>
@@ -75,29 +73,21 @@ function SessionDetailDialog({ session: s, open, onClose, onCheckIn, checkInLoad
 
       <DialogContent dividers>
         <div className='flex flex-col gap-4'>
-
-          {/* Status + tipo + check-in */}
           <Box className='flex flex-wrap gap-2'>
             <Chip size='small' label={statusInfo.label} color={statusInfo.color} />
             {s.type_name && <Chip size='small' label={s.type_name} variant='outlined' />}
             {s.checked_in
               ? <Chip size='small' icon={<i className='tabler-circle-check text-sm ml-1' />} label='Check-in realizado' color='success' variant='tonal' />
-              : null
-            }
+              : null}
           </Box>
-
           <Divider />
-
-          {/* Data / hora / duração */}
           <div className='grid grid-cols-2 gap-3'>
-            <InfoRow icon='tabler-calendar' label='Data'      value={formatDate(s.start_datetime)} />
-            <InfoRow icon='tabler-clock'    label='Horário'   value={`${formatTime(s.start_datetime)} → ${formatTime(s.end_datetime)}`} />
-            <InfoRow icon='tabler-hourglass' label='Duração'  value={`${s.duration_min} min`} />
-            <InfoRow icon='tabler-users'    label='Capacidade' value={`${s.capacity} atletas`} />
+            <InfoRow icon='tabler-calendar'  label='Data'       value={formatDate(s.start_datetime)} />
+            <InfoRow icon='tabler-clock'     label='Horário'    value={`${formatTime(s.start_datetime)} → ${formatTime(s.end_datetime)}`} />
+            <InfoRow icon='tabler-hourglass' label='Duração'    value={`${s.duration_min} min`} />
+            <InfoRow icon='tabler-users'     label='Capacidade' value={`${s.capacity} atletas`} />
             {s.coach_name && <InfoRow icon='tabler-user' label='Coach' value={s.coach_name} />}
           </div>
-
-          {/* Zonas de FC */}
           {(s.target_zone_min || s.target_zone_max) && (
             <>
               <Divider />
@@ -109,16 +99,12 @@ function SessionDetailDialog({ session: s, open, onClose, onCheckIn, checkInLoad
                       sx={{ background: ZONE_COLORS[z], color: '#fff', fontWeight: 600 }} />
                   ))}
                   <Typography variant='caption' color='textSecondary'>
-                    {s.target_zone_min === s.target_zone_max
-                      ? `Zona ${s.target_zone_min}`
-                      : `Zona ${s.target_zone_min} a Z${s.target_zone_max}`}
+                    {s.target_zone_min === s.target_zone_max ? `Zona ${s.target_zone_min}` : `Zona ${s.target_zone_min} a Z${s.target_zone_max}`}
                   </Typography>
                 </Box>
               </div>
             </>
           )}
-
-          {/* Notas */}
           {s.notes && (
             <>
               <Divider />
@@ -165,8 +151,10 @@ function InfoRow({ icon, label, value }) {
   )
 }
 
-function SessionCard({ session: s, onDetail }) {
+function SessionCard({ session: s, onDetail, onCheckIn, checkingId }) {
   const statusInfo = STATUS_LABELS[s.status] || STATUS_LABELS.scheduled
+  const checkInOk  = canCheckIn(s)
+  const isLoading  = checkingId === s.id
 
   return (
     <Card
@@ -197,13 +185,10 @@ function SessionCard({ session: s, onDetail }) {
                 {new Date(s.start_datetime).toLocaleDateString('pt-BR', { month: 'short' }).replace('.', '')}
               </Typography>
             </Box>
-
             <Box className='min-w-0'>
               <Box className='flex items-center gap-2'>
                 <Typography variant='body1' className='font-semibold truncate'>{s.name}</Typography>
-                {s.checked_in ? (
-                  <i className='tabler-circle-check text-success text-base' title='Check-in realizado' />
-                ) : null}
+                {s.checked_in ? <i className='tabler-circle-check text-success text-base' title='Check-in realizado' /> : null}
               </Box>
               <Box className='flex flex-wrap items-center gap-1 mt-0.5'>
                 <Typography variant='caption' color='textSecondary'>
@@ -221,13 +206,31 @@ function SessionCard({ session: s, onDetail }) {
           </Box>
 
           {/* Lado direito */}
-          <Box className='flex items-center gap-2 flex-shrink-0'>
+          <Box className='flex items-center gap-2 flex-shrink-0 flex-wrap'>
             {s.type_name && (
               <Chip size='small' label={s.type_name} variant='tonal'
                 sx={{ background: s.type_color ? `${s.type_color}22` : undefined, color: s.type_color }} />
             )}
             <Chip size='small' label={statusInfo.label} color={statusInfo.color} />
-            <Button size='small' variant='outlined'
+            {/* ── Check-in rápido direto na lista (Ponto 1C) ── */}
+            {checkInOk && (
+              <Button
+                size='small'
+                variant={s.checked_in ? 'outlined' : 'contained'}
+                color={s.checked_in ? 'error' : 'success'}
+                onClick={() => onCheckIn(s)}
+                disabled={isLoading}
+                startIcon={
+                  isLoading
+                    ? <CircularProgress size={14} color='inherit' />
+                    : <i className={`tabler-${s.checked_in ? 'x' : 'circle-check'} text-sm`} />
+                }
+              >
+                {s.checked_in ? 'Cancelar' : 'Check-in'}
+              </Button>
+            )}
+            <Button
+              size='small' variant='outlined'
               startIcon={<i className='tabler-eye text-sm' />}
               onClick={() => onDetail(s)}
             >
@@ -241,11 +244,12 @@ function SessionCard({ session: s, onDetail }) {
 }
 
 export default function SessionsAthleteView() {
-  const [sessions, setSessions]           = useState([])
-  const [loading, setLoading]             = useState(true)
-  const [tab, setTab]                     = useState(0)
-  const [detail, setDetail]               = useState(null)
+  const [sessions,    setSessions]      = useState([])
+  const [loading,     setLoading]       = useState(true)
+  const [tab,         setTab]           = useState(0)
+  const [detail,      setDetail]        = useState(null)
   const [checkInLoading, setCheckInLoading] = useState(false)
+  const [checkingId,  setCheckingId]    = useState(null)
 
   const fetchSessions = useCallback(async () => {
     setLoading(true)
@@ -260,21 +264,20 @@ export default function SessionsAthleteView() {
   useEffect(() => { fetchSessions() }, [fetchSessions])
 
   const handleCheckIn = useCallback(async (s) => {
+    setCheckingId(s.id)
     setCheckInLoading(true)
     try {
       const res  = await fetch(`/api/sessions/${s.id}/checkin`, { method: 'PUT' })
       const data = await res.json()
       if (!res.ok) throw new Error(data.error || 'Erro ao fazer check-in')
-
-      // Atualiza localmente sem refetch completo
       setSessions(prev => prev.map(item =>
         item.id === s.id ? { ...item, checked_in: data.checked_in } : item
       ))
-      // Atualiza o modal também
       setDetail(prev => prev ? { ...prev, checked_in: data.checked_in } : prev)
     } catch (err) {
       alert(err.message)
     } finally {
+      setCheckingId(null)
       setCheckInLoading(false)
     }
   }, [])
@@ -291,12 +294,11 @@ export default function SessionsAthleteView() {
 
   return (
     <Box className='flex flex-col gap-6'>
-      {/* Header */}
       <Box className='flex items-center justify-between flex-wrap gap-3'>
         <div>
           <Typography variant='h5' className='font-bold'>Minhas Sessões</Typography>
           <Typography variant='body2' color='textSecondary'>
-            {upcoming.length} sessão{upcoming.length !== 1 ? 'ões' : ''} próxima{upcoming.length !== 1 ? 's' : ''}
+            {upcoming.length} sessão{upcoming.length !== 1 ? 'ões' : ''} disponível{upcoming.length !== 1 ? 'eis' : ''}
           </Typography>
         </div>
         <IconButton onClick={fetchSessions} title='Atualizar'>
@@ -304,13 +306,11 @@ export default function SessionsAthleteView() {
         </IconButton>
       </Box>
 
-      {/* Tabs */}
       <Tabs value={tab} onChange={(_, v) => setTab(v)} sx={{ borderBottom: 1, borderColor: 'divider' }}>
-        <Tab label={`Próximas (${upcoming.length})`} />
+        <Tab label={`Disponíveis (${upcoming.length})`} />
         <Tab label={`Histórico (${past.length})`} />
       </Tabs>
 
-      {/* Lista */}
       {loading ? (
         <div className='flex flex-col gap-3'>
           {[1, 2, 3].map(i => <Skeleton key={i} variant='rounded' height={72} />)}
@@ -319,16 +319,23 @@ export default function SessionsAthleteView() {
         <Box className='flex flex-col items-center justify-center py-16 gap-3'>
           <i className={`${tab === 0 ? 'tabler-calendar-off' : 'tabler-history'} text-5xl text-secondary opacity-40`} />
           <Typography variant='body1' color='textSecondary'>
-            {tab === 0 ? 'Nenhuma sessão agendada' : 'Nenhuma sessão no histórico'}
+            {tab === 0 ? 'Nenhuma sessão disponível' : 'Nenhuma sessão no histórico'}
           </Typography>
         </Box>
       ) : (
         <div className='flex flex-col gap-3'>
-          {listed.map(s => <SessionCard key={s.id} session={s} onDetail={setDetail} />)}
+          {listed.map(s => (
+            <SessionCard
+              key={s.id}
+              session={s}
+              onDetail={setDetail}
+              onCheckIn={handleCheckIn}
+              checkingId={checkingId}
+            />
+          ))}
         </div>
       )}
 
-      {/* Modal de detalhes */}
       <SessionDetailDialog
         session={detail}
         open={!!detail}

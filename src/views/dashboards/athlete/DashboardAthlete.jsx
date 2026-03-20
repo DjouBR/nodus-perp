@@ -5,25 +5,13 @@ import Card from '@mui/material/Card'
 import CardContent from '@mui/material/CardContent'
 import CardHeader from '@mui/material/CardHeader'
 import Typography from '@mui/material/Typography'
-import Button from '@mui/material/Button'
-import Chip from '@mui/material/Chip'
 import LinearProgress from '@mui/material/LinearProgress'
 import Skeleton from '@mui/material/Skeleton'
-import Link from 'next/link'
 
 import { useDashboard } from '@/hooks/useDashboard'
-
-import StatCard from '@views/dashboards/components/StatCard'
-import ACWRCard from '@views/dashboards/components/ACWRCard'
-
-// ── Empty state: próxima sessão ──────────────────────────────────────
-const EmptyNextSession = () => (
-  <div className='flex flex-col items-center justify-center py-8 gap-2 text-center'>
-    <i className='tabler-calendar-off text-4xl text-secondary opacity-50' />
-    <Typography variant='body1' className='font-semibold'>Nenhuma sessão agendada</Typography>
-    <Typography variant='body2' color='textSecondary'>Seu próximo treino aparecerá aqui quando for agendado.</Typography>
-  </div>
-)
+import StatCard        from '@views/dashboards/components/StatCard'
+import ACWRCard        from '@views/dashboards/components/ACWRCard'
+import NextSessionsCard from '@views/dashboards/components/NextSessionsCard'
 
 const DashboardAthlete = () => {
   const { data, loading, error } = useDashboard('athlete')
@@ -67,7 +55,6 @@ const DashboardAthlete = () => {
     },
   ]
 
-  const ns = data?.nextSession
   const progress = data?.progress
 
   return (
@@ -79,48 +66,9 @@ const DashboardAthlete = () => {
         </Grid>
       ))}
 
-      {/* ── Linha 2: Próxima Sessão + ACWR ── */}
+      {/* ── Linha 2: Próximas Sessões + ACWR ── */}
       <Grid size={{ xs: 12, md: 8 }}>
-        <Card>
-          <CardHeader
-            title='Próxima Sessão'
-            avatar={<i className='tabler-calendar text-primary text-2xl' />}
-          />
-          <CardContent>
-            {loading ? (
-              <>
-                <Skeleton variant='text' width='60%' height={32} />
-                <Skeleton variant='text' width='40%' />
-                <Skeleton variant='rounded' height={36} className='mt-3' />
-              </>
-            ) : !ns ? (
-              <EmptyNextSession />
-            ) : (
-              <div className='flex flex-col gap-4'>
-                <div className='flex justify-between items-start'>
-                  <div>
-                    <Typography variant='h6' className='font-bold'>{ns.name}</Typography>
-                    <Typography color='textSecondary' variant='body2'>
-                      {new Date(ns.start_datetime).toLocaleDateString('pt-BR', { weekday: 'long', day: '2-digit', month: 'short' })} às {ns.time} — Coach: {ns.coach}
-                    </Typography>
-                  </div>
-                  <Chip
-                    label={ns.status === 'active' ? 'Em andamento' : 'Agendada'}
-                    color={ns.status === 'active' ? 'success' : 'primary'}
-                    variant='tonal'
-                  />
-                </div>
-                <div className='flex gap-2 flex-wrap'>
-                  {ns.duration_min && <Chip icon={<i className='tabler-clock ml-2' />} label={`${ns.duration_min} min`} size='small' variant='tonal' />}
-                  {ns.capacity     && <Chip icon={<i className='tabler-users ml-2' />} label={`${ns.capacity} atletas`} size='small' variant='tonal' />}
-                </div>
-                <Button variant='contained' component={Link} href='/sessions' fullWidth>
-                  Ver Detalhes da Sessão
-                </Button>
-              </div>
-            )}
-          </CardContent>
-        </Card>
+        <NextSessionsCard />
       </Grid>
 
       <Grid size={{ xs: 12, md: 4 }}>
