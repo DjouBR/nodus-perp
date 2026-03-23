@@ -4,7 +4,7 @@ import { authOptions } from '@/libs/auth'
 import { db } from '@/lib/db/index.js'
 import { training_sessions, session_types, session_athletes } from '@/lib/db/schema/sessions'
 import { users } from '@/lib/db/schema/users'
-import { eq, desc } from 'drizzle-orm'
+import { eq, and, desc, ne } from 'drizzle-orm'
 import { randomUUID } from 'crypto'
 
 const STAFF_ROLES   = ['tenant_admin', 'academy_coach', 'coach']
@@ -31,6 +31,27 @@ function tenantFilter(user) {
   return eq(training_sessions.tenant_id, user.tenant_id)
 }
 
+const SESSION_SELECT_FIELDS = {
+  id:                  training_sessions.id,
+  name:                training_sessions.name,
+  start_datetime:      training_sessions.start_datetime,
+  end_datetime:        training_sessions.end_datetime,
+  duration_min:        training_sessions.duration_min,
+  status:              training_sessions.status,
+  capacity:            training_sessions.capacity,
+  notes:               training_sessions.notes,
+  target_zone_min:     training_sessions.target_zone_min,
+  target_zone_max:     training_sessions.target_zone_max,
+  coach_id:            training_sessions.coach_id,
+  session_type_id:     training_sessions.session_type_id,
+  recurrence_group_id: training_sessions.recurrence_group_id,
+  checked_in:          session_athletes.checked_in,
+  coach_name:          users.name,
+  type_name:           session_types.name,
+  type_color:          session_types.color,
+  type_icon:           session_types.icon,
+}
+
 // GET /api/sessions
 export async function GET(req) {
   const session = await getServerSession(authOptions)
@@ -39,34 +60,46 @@ export async function GET(req) {
   const { role, id: userId } = session.user
 
   try {
-    // ── Atleta: retorna apenas as suas próprias sessões (via session_athletes) ──
-    if (ATHLETE_ROLES.includes(role)) {
+    // ── Atleta independente: só vê as próprias sessões (INNER JOIN) ──
+    if (role === 'athlete') {
       const rows = await db
-        .select({
-          id:                  training_sessions.id,
-          name:                training_sessions.name,
-          start_datetime:      training_sessions.start_datetime,
-          end_datetime:        training_sessions.end_datetime,
-          duration_min:        training_sessions.duration_min,
-          status:              training_sessions.status,
-          capacity:            training_sessions.capacity,
-          notes:               training_sessions.notes,
-          target_zone_min:     training_sessions.target_zone_min,
-          target_zone_max:     training_sessions.target_zone_max,
-          coach_id:            training_sessions.coach_id,
-          session_type_id:     training_sessions.session_type_id,
-          recurrence_group_id: training_sessions.recurrence_group_id,
-          checked_in:          session_athletes.checked_in,
-          coach_name:          users.name,
-          type_name:           session_types.name,
-          type_color:          session_types.color,
-          type_icon:           session_types.icon,
-        })
+        .select(SESSION_SELECT_FIELDS)
         .from(session_athletes)
         .innerJoin(training_sessions, eq(training_sessions.id, session_athletes.session_id))
-        .leftJoin(users, eq(training_sessions.coach_id, users.id))
+        .leftJoin(users,         eq(training_sessions.coach_id,        users.id))
         .leftJoin(session_types, eq(training_sessions.session_type_id, session_types.id))
         .where(eq(session_athletes.athlete_id, userId))
+        .orderBy(desc(training_sessions.start_datetime))
+
+      return NextResponse.json(rows.map(r => ({ ...r, status: computeStatus(r) })))
+    }
+
+    // ── Aluno de academia / coach_athlete: vê TODAS as sessões do tenant ──
+    // LEFT JOIN em session_athletes apenas para preencher checked_in quando existir.
+    if (role === 'academy_athlete' || role === 'coach_athlete') {
+      const { tenant_id: tenantId } = session.user
+
+      const rows = await db
+        .select({
+          ...SESSION_SELECT_FIELDS,
+          recurrence_rule: training_sessions.recurrence_rule,
+        })
+        .from(training_sessions)
+        .leftJoin(
+          session_athletes,
+          and(
+            eq(session_athletes.session_id,  training_sessions.id),
+            eq(session_athletes.athlete_id,  userId)
+          )
+        )
+        .leftJoin(users,         eq(training_sessions.coach_id,        users.id))
+        .leftJoin(session_types, eq(training_sessions.session_type_id, session_types.id))
+        .where(
+          and(
+            eq(training_sessions.tenant_id, tenantId),
+            ne(training_sessions.status, 'cancelled')
+          )
+        )
         .orderBy(desc(training_sessions.start_datetime))
 
       return NextResponse.json(rows.map(r => ({ ...r, status: computeStatus(r) })))
@@ -79,27 +112,11 @@ export async function GET(req) {
 
     const sessions = await db
       .select({
-        id:                  training_sessions.id,
-        name:                training_sessions.name,
-        start_datetime:      training_sessions.start_datetime,
-        end_datetime:        training_sessions.end_datetime,
-        duration_min:        training_sessions.duration_min,
-        status:              training_sessions.status,
-        capacity:            training_sessions.capacity,
-        notes:               training_sessions.notes,
-        target_zone_min:     training_sessions.target_zone_min,
-        target_zone_max:     training_sessions.target_zone_max,
-        coach_id:            training_sessions.coach_id,
-        session_type_id:     training_sessions.session_type_id,
-        recurrence_group_id: training_sessions.recurrence_group_id,
-        recurrence_rule:     training_sessions.recurrence_rule,
-        coach_name:          users.name,
-        type_name:           session_types.name,
-        type_color:          session_types.color,
-        type_icon:           session_types.icon,
+        ...SESSION_SELECT_FIELDS,
+        recurrence_rule: training_sessions.recurrence_rule,
       })
       .from(training_sessions)
-      .leftJoin(users, eq(training_sessions.coach_id, users.id))
+      .leftJoin(users,         eq(training_sessions.coach_id,        users.id))
       .leftJoin(session_types, eq(training_sessions.session_type_id, session_types.id))
       .where(tenantFilter(session.user))
 

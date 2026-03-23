@@ -4,7 +4,7 @@ import { authOptions } from '@/libs/auth'
 import { db } from '@/lib/db/index.js'
 import { training_sessions, session_types, session_athletes } from '@/lib/db/schema/sessions'
 import { users } from '@/lib/db/schema/users'
-import { eq, and, gte, or, isNull } from 'drizzle-orm'
+import { eq, and, gte, ne } from 'drizzle-orm'
 
 const ATHLETE_ROLES = ['athlete', 'academy_athlete', 'coach_athlete']
 
@@ -20,19 +20,16 @@ function computeStatus(row) {
 
 /**
  * GET /api/dashboard/athlete/sessions
- * Retorna as próximas sessões para o card do dashboard do atleta.
+ * Retorna até 2 próximas sessões para o card do dashboard do atleta.
  *
  * Lógica por role:
- * - academy_athlete: todas as sessões abertas do tenant (não só as que foi adicionado)
- * - coach_athlete:   sessões do tenant do coach (onde está inscrito ou abertas)
- * - athlete:         apenas sessões em que está inscrito
+ * - academy_athlete / coach_athlete: todas as sessões abertas do tenant
+ * - athlete:                         apenas sessões em que está inscrito
  *
  * Ordenação:
- * 1. Sessões com check-in feito pelo atleta (checked_in=1) — primeiro
- * 2. Sessões em que o atleta está inscrito (sem check-in)
- * 3. Demais sessões abertas da academia
- *
- * Limite: 2 sessões (para o card do dashboard)
+ * 1. check-in já feito (checked_in = 1)
+ * 2. inscrito sem check-in
+ * 3. demais sessões abertas da academia
  */
 export async function GET(req) {
   const session = await getServerSession(authOptions)
@@ -47,7 +44,6 @@ export async function GET(req) {
   const now = new Date()
 
   try {
-    // ── Busca sessões futuras + inscrições do atleta num join único ──
     const rows = await db
       .select({
         id:             training_sessions.id,
@@ -61,49 +57,38 @@ export async function GET(req) {
         type_name:      session_types.name,
         type_color:     session_types.color,
         type_icon:      session_types.icon,
-        // null se atleta não estiver inscrito
         checked_in:     session_athletes.checked_in,
         athlete_id:     session_athletes.athlete_id,
       })
       .from(training_sessions)
-      .leftJoin(users,            eq(training_sessions.coach_id,       users.id))
-      .leftJoin(session_types,    eq(training_sessions.session_type_id, session_types.id))
-      // left join: traz a inscrição do atleta se existir, mas não filtra
+      .leftJoin(users,         eq(training_sessions.coach_id,        users.id))
+      .leftJoin(session_types, eq(training_sessions.session_type_id, session_types.id))
       .leftJoin(
         session_athletes,
         and(
-          eq(session_athletes.session_id,  training_sessions.id),
-          eq(session_athletes.athlete_id,  userId)
+          eq(session_athletes.session_id, training_sessions.id),
+          eq(session_athletes.athlete_id, userId)
         )
       )
       .where(
         and(
-          // Apenas sessões futuras ou ativas
-          gte(training_sessions.end_datetime, now),
-          // Não canceladas
-          // (usamos computeStatus depois, mas filtramos cancelled no banco)
-          or(
-            isNull(training_sessions.status),
-          ),
-          // Isolamento por tenant
+          gte(training_sessions.end_datetime, now),   // apenas futuras/ativas
+          ne(training_sessions.status, 'cancelled'),  // exclui canceladas
           role === 'athlete'
-            ? eq(session_athletes.athlete_id, userId)   // atleta independente: só as suas
-            : eq(training_sessions.tenant_id, tenantId) // academy/coach_athlete: todas do tenant
+            ? eq(session_athletes.athlete_id, userId)    // independente: só as suas
+            : eq(training_sessions.tenant_id, tenantId)  // academia: todas do tenant
         )
       )
 
-    // Remove sessões canceladas e já terminadas
+    // Aplica status on-the-fly e remove finished
     const filtered = rows
       .map(r => ({ ...r, status: computeStatus(r) }))
-      .filter(r => r.status !== 'cancelled' && r.status !== 'finished')
+      .filter(r => r.status !== 'finished')
 
-    // Ordenação:
-    // 0 = checked_in=1 (inscrito + check-in feito)
-    // 1 = inscrito sem check-in (athlete_id não null, checked_in=0)
-    // 2 = não inscrito (academy_athlete vê aulas abertas)
+    // Ordena: check-in feito (0) → inscrito (1) → demais (2) → por data
     const priority = r => {
-      if (r.checked_in === 1)             return 0
-      if (r.athlete_id === userId)        return 1
+      if (r.checked_in === 1)      return 0
+      if (r.athlete_id === userId) return 1
       return 2
     }
 
@@ -113,7 +98,6 @@ export async function GET(req) {
       return new Date(a.start_datetime) - new Date(b.start_datetime)
     })
 
-    // Máximo 2 para o card
     const result = filtered.slice(0, 2).map(r => ({
       id:             r.id,
       name:           r.name,
