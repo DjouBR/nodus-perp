@@ -271,40 +271,79 @@
 
 ---
 
-## ✅ FASE 6 — Módulo Sessões de Treino (Parcialmente Concluída — 19/03/2026)
+## ✅ FASE 6 — Módulo Sessões de Treino (Concluída — 19-24/03/2026)
 
-### API
+### API — Backend
+
 - [x] `GET /api/sessions` — consciente do role:
   - **Staff** (coach, academy_coach, tenant_admin): retorna todas as sessões do tenant/coach
-  - **Atleta** (athlete, academy_athlete, coach_athlete): retorna **apenas as sessões em que está inscrito** via `session_athletes`, com campo `checked_in`
+    - Usa `SESSION_SELECT_STAFF` — sem `checked_in`, sem join em `session_athletes` (evita erro 500)
+  - **`academy_athlete` / `coach_athlete`**: retorna **todas as sessões abertas do tenant** via LEFT JOIN
+    - `checked_in` preenchido apenas quando existe linha em `session_athletes` para o atleta
+  - **`athlete` independente**: retorna apenas as sessões em que está inscrito (INNER JOIN)
+  - **Status calculado on-the-fly** via `computeStatus(row)` (Opção A — desenvolvimento)
 - [x] `POST /api/sessions` — criação com suporte a recorrência (dias da semana + data fim)
   - Insere em lotes de 50 para evitar timeout
   - Vincula `athlete_ids` via `session_athletes` automaticamente
-- [x] **Status calculado on-the-fly** — função `computeStatus(row)` na API (Opção A)
-  - `cancelled` → sempre preservado (manual)
-  - `active` → `start_datetime <= NOW() < end_datetime`
-  - `finished` → `NOW() >= end_datetime`
-  - `scheduled` → padrão (ainda não começou)
-  - ⚠️ **TODO (Fase 16/deploy):** migrar para Opção B — cron job `GET /api/cron/sessions-status` rodando a cada 5 min no servidor, atualizando o banco diretamente. Ver seção Infraestrutura.
+- [x] `PUT /api/sessions/[id]` — edição de sessão individual
+- [x] `DELETE /api/sessions/[id]` — exclusão/cancelamento (suporte a `?scope=future`)
+- [x] `PUT /api/sessions/[id]/checkin` — alterna check-in do atleta logado
+  - **`academy_athlete` / `coach_athlete`**: auto-inscrição na hora do check-in (sem inscrição prévia necessária)
+  - **`athlete` independente**: exige inscrição prévia em `session_athletes`
+  - Validações: sessão cancelada → 400 | sessão finalizada → 400 | sessão não encontrada → 404
+- [x] `GET /api/dashboard/athlete/sessions` — rota dedicada para o card do dashboard
+  - `academy_athlete` / `coach_athlete` → vê todas as sessões abertas do tenant
+  - `athlete` independente → só as sessões em que está inscrito
+  - Ordenação: check-in feito → inscrito sem check-in → demais abertas
+  - Máximo 2 resultados para o card
 
-### Views
+### Componentes / Views — Frontend
+
 - [x] `SessionsCalendarView` — calendário FullCalendar para staff (coach, admin, receptionist)
-- [x] `SessionsAthleteView` — lista de sessões para atletas (nova — 19/03/2026)
-  - Tabs "Próximas" / "Histórico" separados por data
-  - Card por sessão com bloco de data visual, horário, duração, coach, tipo de treino
-  - Modal de detalhes com: data, horário, duração, capacidade, coach, zonas de FC alvo (cores Z1–Z5), notas do coach
-  - Chip "Check-in realizado" quando `checked_in = 1`
-  - Estado vazio amigável em cada tab + botão de refresh manual
+  - Filtro por tipo de sessão no sidebar — sessões sem `session_type_id` sempre exibidas (correção 24/03)
+- [x] `SessionsAthleteView` — lista de sessões para atletas (`/sessions`)
+  - Aba **"Disponíveis"**: todas as sessões não canceladas/finalizadas, com botão Check-in verde
+  - Aba **"Histórico"**: **apenas sessões com `checked_in = 1`** (participação confirmada)
+  - Botão Check-in/Cancelar direto no card (sem precisar abrir detalhes)
+  - Modal de detalhes: data, horário, duração, capacidade, coach, zonas FC, notas
+  - `canCheckIn()` — permite check-in em qualquer sessão aberta (scheduled ou active)
+- [x] `NextSessionsCard` — card reutilizável para o dashboard do atleta
+  - Layout com bloco de data, hora, duração, coach, badge de tipo
+  - Botão "Check-in" verde / "Cancelar" vermelho direto no card
+  - Loading state com `CircularProgress` por sessão individual
+  - Botão "Ver mais sessões" → `/sessions`
+- [x] `DashboardAthlete` — substituído card antigo (uma sessão só, sem check-in) pelo `NextSessionsCard`
 - [x] `sessions/page.jsx` — renderiza view correta por role:
   - `athlete / academy_athlete / coach_athlete` → `SessionsAthleteView`
   - Demais roles → `SessionsCalendarView`
 
-### Pendente nesta fase
-- [ ] `PUT /api/sessions/[id]` — edição de sessão
-- [ ] `DELETE /api/sessions/[id]` — cancelamento/exclusão
+### Bugs corrigidos nesta fase (19-24/03/2026)
+
+- [x] Botão Check-in sumia para sessões futuras — `canCheckIn()` exigia `isToday || isActive`
+  - Corrigido: qualquer sessão com `status !== 'cancelled' && status !== 'finished'` tem o botão
+- [x] Calendário da academia retornava 500 — `SESSION_SELECT_FIELDS` incluía `session_athletes.checked_in` mas a query de staff não fazia join com `session_athletes`
+  - Corrigido: separado em `SESSION_SELECT_STAFF` e `SESSION_SELECT_ATHLETE`
+- [x] Calendário não exibia sessões sem tipo — filtro por `activeTypes` descartava `session_type_id = null`
+  - Corrigido: `typeId == null || activeTypes.includes(typeId)`
+- [x] Histórico mostrava sessões não participadas — filtro usava `start_datetime < now`
+  - Corrigido: filtro por `checked_in === 1`
+- [x] Check-in retornava 404 "Você não está inscrito" para `academy_athlete`
+  - Corrigido: auto-inscrição automática em `session_athletes` no ato do check-in para roles de academia
+
+### Pendências desta fase / próximas evoluções
+
+> **Nota sobre o Histórico de Sessões:**
+> Atualmente a aba "Histórico" em `/sessions` mostra sessões com `checked_in = 1` (atleta marcou presença
+> antes/durante a aula). O comportamento ideal futuro é:
+> - Aparecer no histórico **somente após** a sessão ter ocorrido (`end_datetime < now`)
+> - Confirmação de participação via vínculo com dispositivo ANT+ (início/fim de sessão com dado de FC)
+> - Isso será implementado na **Fase 7 (Monitoramento em Tempo Real)** quando o dispositivo puder
+>   confirmar a presença real do atleta durante a sessão.
+
+- [ ] Histórico de sessões no perfil do atleta (`AthleteDetailView`) — mostrar sessões com `checked_in = 1`
 - [ ] Cancelamento manual de sessão pelo coach (chip `cancelled` já suportado na view)
-- [ ] Check-in do atleta (`PUT /api/sessions/[id]/checkin`)
-- [ ] Histórico de sessões no perfil do atleta (`AthleteDetailView`)
+- [ ] Confirmação automática de presença via dado de FC do dispositivo ANT+ (Fase 7)
+- [ ] Cron job para atualizar status de sessões no banco (Fase 16 — deploy)
 
 ---
 
@@ -342,6 +381,9 @@
 - [ ] Zonas de FC com alertas visuais
 - [ ] Tela TV (`/academy/tvscreen`) — exibição para academia
 - [ ] Persistência dos dados de FC no banco (tabela `heart_rate`)
+- [ ] **Confirmação automática de presença** via dado de FC do dispositivo durante a sessão
+  - Ao detectar FC do atleta durante a janela da sessão → `checked_in = 1` automático
+  - Substituirá o check-in manual para sessões monitoradas
 
 ---
 
@@ -571,6 +613,14 @@
 - `cancelled` é imutável — só pode ser definido manualmente pelo coach via `PUT /api/sessions/[id]`
 - Na Fase 16 (deploy), migrar para Opção B: cron atualizando o banco diretamente
 
+### Check-in e Histórico de Sessões (comportamento atual vs. futuro)
+
+| Aspecto | Comportamento Atual | Comportamento Futuro (Fase 7) |
+|---|---|---|
+| Check-in | Manual — atleta clica no botão | Automático via FC do dispositivo ANT+ |
+| Histórico | Sessões com `checked_in = 1` | Sessões com `checked_in = 1` **E** `end_datetime < now` |
+| Confirmação de presença | Ato de clicar no botão | Dado de FC detectado durante a sessão |
+
 ---
 
-*Última atualização: 19/03/2026*
+*Última atualização: 24/03/2026*
