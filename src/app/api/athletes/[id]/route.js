@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/libs/auth'
 import { db } from '@/lib/db/index.js'
-import { users, athlete_profiles, sensors, daily_logs, weekly_indices, session_athletes, training_sessions } from '@/lib/db/schema/index.js'
+import { users, athlete_profiles, sensors, daily_logs, weekly_indices, session_athletes, training_sessions, session_types } from '@/lib/db/schema/index.js'
 import { eq, and, or, desc } from 'drizzle-orm'
 import bcrypt from 'bcryptjs'
 
@@ -49,9 +49,12 @@ export async function GET(request, { params }) {
     const logs           = await db.select().from(daily_logs).where(eq(daily_logs.athlete_id, id)).orderBy(desc(daily_logs.log_date)).limit(7)
     const [acwr]         = await db.select().from(weekly_indices).where(eq(weekly_indices.athlete_id, id)).orderBy(desc(weekly_indices.week_start)).limit(1)
 
+    // Busca sessões em que o atleta participou (checked_in = 1)
+    // Inclui dados de desempenho + nome do tipo de sessão
     const recentSessions = await db
       .select({
         session_id:      session_athletes.session_id,
+        checked_in:      session_athletes.checked_in,
         avg_hr:          session_athletes.avg_hr,
         max_hr:          session_athletes.max_hr,
         calories:        session_athletes.calories,
@@ -64,14 +67,22 @@ export async function GET(request, { params }) {
         time_z5_sec:     session_athletes.time_z5_sec,
         session_name:    training_sessions.name,
         start_datetime:  training_sessions.start_datetime,
+        end_datetime:    training_sessions.end_datetime,
         duration_min:    training_sessions.duration_min,
         status:          training_sessions.status,
+        session_type_id: training_sessions.session_type_id,
+        type_name:       session_types.name,
+        type_color:      session_types.color,
       })
       .from(session_athletes)
       .innerJoin(training_sessions, eq(session_athletes.session_id, training_sessions.id))
-      .where(eq(session_athletes.athlete_id, id))
+      .leftJoin(session_types, eq(training_sessions.session_type_id, session_types.id))
+      .where(and(
+        eq(session_athletes.athlete_id, id),
+        eq(session_athletes.checked_in, 1),
+      ))
       .orderBy(desc(training_sessions.start_datetime))
-      .limit(10)
+      .limit(20)
 
     const { password_hash, ...safeUser } = user
     return NextResponse.json({
@@ -130,8 +141,6 @@ export async function PUT(request, { params }) {
       await db.update(users).set(userUpdate).where(eq(users.id, id))
 
     // ── campos da tabela athlete_profiles ──────────────────────────
-    // Campos numéricos (int/float): usar nullifyNum para evitar ER_TRUNCATED_WRONG_VALUE
-    // Campos texto: usar nullify
     const numFields  = ['hr_max','hr_rest','hr_threshold','weight_kg','height_cm','body_fat_pct',
                         'zone1_max','zone2_max','zone3_max','zone4_max']
     const textFields = ['goal','medical_notes','emergency_contact','emergency_phone',
@@ -141,7 +150,6 @@ export async function PUT(request, { params }) {
     for (const f of numFields)  { if (body[f] !== undefined) profileUpdate[f] = nullifyNum(body[f]) }
     for (const f of textFields) { if (body[f] !== undefined) profileUpdate[f] = nullify(body[f]) }
 
-    // Recalcula zonas automaticamente se hr_max foi enviado e zonas não foram
     if (body.hr_max && !body.zone1_max) {
       const hm = parseInt(body.hr_max)
       if (!isNaN(hm) && hm > 0) {
@@ -153,7 +161,6 @@ export async function PUT(request, { params }) {
     }
 
     if (Object.keys(profileUpdate).length > 0) {
-      // Upsert: se não existir o profile, cria
       const [existingProfile] = await db.select({ user_id: athlete_profiles.user_id })
         .from(athlete_profiles).where(eq(athlete_profiles.user_id, id)).limit(1)
 

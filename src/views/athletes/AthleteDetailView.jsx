@@ -7,6 +7,15 @@ import { useSession } from 'next-auth/react'
 // ── Helpers ──────────────────────────────────────────────────────────────────────
 const fmt     = (val, unit = '') => val ? `${val}${unit}` : '—'
 const fmtDate = d => d ? new Date(d).toLocaleDateString('pt-BR') : '—'
+const fmtDateShort = d => {
+  if (!d) return '—'
+  const dt = new Date(d)
+  return dt.toLocaleDateString('pt-BR', { day: '2-digit', month: 'short' })
+}
+const fmtTime = d => {
+  if (!d) return ''
+  return new Date(d).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })
+}
 const GENDER  = { M: 'Masculino', F: 'Feminino', other: 'Outro' }
 const STATUS_STYLE = {
   active:    { label: 'Ativo',    cls: 'bg-success/15 text-success' },
@@ -20,6 +29,19 @@ const ZONE_COLORS = [
   { bg: 'bg-orange-500/15', text: 'text-orange-500', label: 'Z4 Anaeróbio'   },
   { bg: 'bg-red-500/15',    text: 'text-red-500',    label: 'Z5 Máximo'       },
 ]
+
+// Calcula total de tempo em zonas em segundos e retorna percentuais
+const calcZonePcts = s => {
+  const total = (s.time_z1_sec||0)+(s.time_z2_sec||0)+(s.time_z3_sec||0)+(s.time_z4_sec||0)+(s.time_z5_sec||0)
+  if (!total) return null
+  return [
+    Math.round((s.time_z1_sec||0)/total*100),
+    Math.round((s.time_z2_sec||0)/total*100),
+    Math.round((s.time_z3_sec||0)/total*100),
+    Math.round((s.time_z4_sec||0)/total*100),
+    Math.round((s.time_z5_sec||0)/total*100),
+  ]
+}
 
 // Normaliza qualquer formato de data para yyyy-MM-dd
 const toDateInput = d => {
@@ -81,6 +103,121 @@ function ZoneBadge({ minBpm, maxBpm, idx }) {
   )
 }
 
+// ── Componente de card de sessão expandível ───────────────────────────────────
+function SessionCard({ s }) {
+  const [open, setOpen] = useState(false)
+  const zonePcts = calcZonePcts(s)
+  const dt = new Date(s.start_datetime)
+  const day = dt.toLocaleDateString('pt-BR', { day: '2-digit', month: 'short' })
+  const hour = dt.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })
+
+  return (
+    <div
+      className='rounded-xl overflow-hidden transition-shadow hover:shadow-md cursor-pointer'
+      style={{ border: '1px solid var(--mui-palette-divider)' }}
+      onClick={() => setOpen(o => !o)}
+    >
+      {/* Linha principal */}
+      <div className='flex items-center gap-4 px-4 py-3'>
+        {/* Bloco de data */}
+        <div className='flex flex-col items-center justify-center rounded-lg px-3 py-2 min-w-[52px]'
+          style={{ backgroundColor: 'var(--mui-palette-primary-main)', color: '#fff' }}>
+          <span className='text-xs font-bold leading-none'>{day.split(' ')[0]}</span>
+          <span className='text-[10px] leading-none mt-0.5 opacity-80'>{day.split(' ')[1]}</span>
+        </div>
+
+        {/* Nome + tipo + hora */}
+        <div className='flex-1 min-w-0'>
+          <p className='font-semibold text-sm truncate'>{s.session_name}</p>
+          <div className='flex items-center gap-2 mt-0.5'>
+            <span className='text-xs' style={{ color: 'var(--mui-palette-text-secondary)' }}>{hour}</span>
+            {s.duration_min && (
+              <span className='text-xs' style={{ color: 'var(--mui-palette-text-secondary)' }}>· {s.duration_min} min</span>
+            )}
+            {s.type_name && (
+              <span
+                className='rounded-full px-2 py-0.5 text-[10px] font-semibold'
+                style={{
+                  backgroundColor: s.type_color ? `${s.type_color}22` : 'var(--mui-palette-action-hover)',
+                  color: s.type_color ?? 'var(--mui-palette-text-secondary)',
+                }}
+              >{s.type_name}</span>
+            )}
+          </div>
+        </div>
+
+        {/* Métricas rápidas */}
+        <div className='flex items-center gap-4'>
+          {s.avg_hr && (
+            <div className='flex flex-col items-center'>
+              <span className='text-sm font-semibold' style={{ color: 'var(--mui-palette-error-main)' }}>{s.avg_hr}</span>
+              <span className='text-[10px]' style={{ color: 'var(--mui-palette-text-secondary)' }}>FC méd</span>
+            </div>
+          )}
+          {s.trimp && (
+            <div className='flex flex-col items-center'>
+              <span className='text-sm font-semibold' style={{ color: 'var(--mui-palette-primary-main)' }}>{s.trimp}</span>
+              <span className='text-[10px]' style={{ color: 'var(--mui-palette-text-secondary)' }}>TRIMP</span>
+            </div>
+          )}
+          {s.calories && (
+            <div className='flex flex-col items-center'>
+              <span className='text-sm font-semibold' style={{ color: 'var(--mui-palette-warning-main)' }}>{s.calories}</span>
+              <span className='text-[10px]' style={{ color: 'var(--mui-palette-text-secondary)' }}>kcal</span>
+            </div>
+          )}
+          <i className={`text-base transition-transform ${open ? 'tabler-chevron-up' : 'tabler-chevron-down'}`}
+            style={{ color: 'var(--mui-palette-text-secondary)' }} />
+        </div>
+      </div>
+
+      {/* Detalhe expandido */}
+      {open && (
+        <div className='px-4 pb-4 pt-2' style={{ borderTop: '1px solid var(--mui-palette-divider)' }}>
+          <div className='grid grid-cols-2 gap-3 sm:grid-cols-4 mb-3'>
+            {[
+              { label: 'FC Máxima', value: s.max_hr ? `${s.max_hr} bpm` : '—', color: 'text-error' },
+              { label: 'FC Média',  value: s.avg_hr ? `${s.avg_hr} bpm` : '—', color: 'text-warning' },
+              { label: 'TRIMP',     value: s.trimp  ? String(s.trimp)   : '—', color: 'text-primary' },
+              { label: 'Calorias',  value: s.calories ? `${s.calories} kcal` : '—', color: 'text-success' },
+            ].map(m => (
+              <div key={m.label} className='rounded-lg p-3 text-center'
+                style={{ backgroundColor: 'var(--mui-palette-action-hover)' }}>
+                <p className={`text-base font-bold ${m.color}`}>{m.value}</p>
+                <p className='text-xs mt-0.5' style={{ color: 'var(--mui-palette-text-secondary)' }}>{m.label}</p>
+              </div>
+            ))}
+          </div>
+
+          {/* Barras de zonas de FC */}
+          {zonePcts && (
+            <div>
+              <p className='text-xs font-medium mb-2' style={{ color: 'var(--mui-palette-text-secondary)' }}>Tempo por Zona de FC</p>
+              <div className='flex rounded-full overflow-hidden h-3'>
+                {zonePcts.map((pct, i) => pct > 0 && (
+                  <div key={i} style={{ width: `${pct}%` }}
+                    className={[
+                      'bg-blue-500','bg-green-500','bg-yellow-500','bg-orange-500','bg-red-500'
+                    ][i]}
+                    title={`Z${i+1}: ${pct}%`}
+                  />
+                ))}
+              </div>
+              <div className='flex gap-3 mt-1.5 flex-wrap'>
+                {zonePcts.map((pct, i) => pct > 0 && (
+                  <span key={i} className='text-[10px]' style={{ color: 'var(--mui-palette-text-secondary)' }}>
+                    Z{i+1}: {pct}%
+                  </span>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  )
+}
+
 /**
  * Props:
  *   athleteId      {string}   UUID do atleta (ou via params.id)
@@ -94,7 +231,6 @@ export default function AthleteDetailView({ params, athleteId: propAthleteId, ba
   const searchParams    = useSearchParams()
   const { data: session } = useSession()
 
-  // canEdit: prop explícita > role da sessão
   const canEdit = canEditProp ?? ['super_admin', 'tenant_admin', 'coach', 'academy_coach'].includes(session?.user?.role)
 
   const [data, setData]         = useState(null)
@@ -184,6 +320,8 @@ export default function AthleteDetailView({ params, athleteId: propAthleteId, ba
     { min: p.zone4_max ?? Math.round(hrMax * 0.90), max: hrMax },
   ] : []
 
+  const sessions = data.recent_sessions ?? []
+
   return (
     <div className='flex flex-col gap-6'>
 
@@ -248,7 +386,11 @@ export default function AthleteDetailView({ params, athleteId: propAthleteId, ba
 
       {/* Tabs */}
       <div className='flex gap-1 rounded-xl p-1' style={{ backgroundColor: 'var(--mui-palette-background-paper)' }}>
-        {[['overview','tabler-user','Visão Geral'],['sessions','tabler-run','Sessões'],['logs','tabler-clipboard-list','Daily Logs']].map(([id, icon, label]) => (
+        {[
+          ['overview', 'tabler-user',           'Visão Geral'],
+          ['sessions', 'tabler-run',             `Sessões${sessions.length ? ` (${sessions.length})` : ''}`],
+          ['logs',     'tabler-clipboard-list',  'Daily Logs'],
+        ].map(([id, icon, label]) => (
           <button key={id} onClick={() => setTab(id)}
             className='flex flex-1 items-center justify-center gap-2 rounded-lg py-2 text-sm font-medium transition-colors'
             style={{
@@ -440,40 +582,56 @@ export default function AthleteDetailView({ params, athleteId: propAthleteId, ba
         </Card>
       )}
 
-      {/* Tab: Sessões */}
+      {/* Tab: Sessões — Histórico de participações (checked_in = 1) */}
       {tab === 'sessions' && (
-        <Card title='Últimas Sessões' icon='tabler-run'>
-          {data.recent_sessions?.length ? (
-            <div className='overflow-x-auto'>
-              <table className='w-full text-sm'>
-                <thead>
-                  <tr className='text-left text-xs uppercase' style={{ color: 'var(--mui-palette-text-secondary)', borderBottom: '1px solid var(--mui-palette-divider)' }}>
-                    <th className='pb-3 pr-4'>Sessão</th>
-                    <th className='pb-3 pr-4'>Data</th>
-                    <th className='pb-3 pr-4'>FC Méd</th>
-                    <th className='pb-3 pr-4'>FC Máx</th>
-                    <th className='pb-3 pr-4'>TRIMP</th>
-                    <th className='pb-3'>Duração</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {data.recent_sessions.map((s, i) => (
-                    <tr key={i} style={{ borderBottom: '1px solid var(--mui-palette-divider)' }}>
-                      <td className='py-3 pr-4 font-medium'>{s.session_name}</td>
-                      <td className='py-3 pr-4' style={{ color: 'var(--mui-palette-text-secondary)' }}>{fmtDate(s.start_datetime)}</td>
-                      <td className='py-3 pr-4'>{fmt(s.avg_hr, ' bpm')}</td>
-                      <td className='py-3 pr-4 font-semibold' style={{ color: 'var(--mui-palette-error-main)' }}>{fmt(s.max_hr, ' bpm')}</td>
-                      <td className='py-3 pr-4'>{fmt(s.trimp)}</td>
-                      <td className='py-3'>{fmt(s.duration_min, ' min')}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          ) : (
-            <p className='py-8 text-center' style={{ color: 'var(--mui-palette-text-secondary)' }}>Nenhuma sessão registrada</p>
-          )}
-        </Card>
+        <div className='flex flex-col gap-4'>
+          {/* Resumo estatístico */}
+          {sessions.length > 0 && (() => {
+            const totalCalories = sessions.reduce((acc, s) => acc + (s.calories || 0), 0)
+            const avgHr = sessions.filter(s => s.avg_hr).length
+              ? Math.round(sessions.filter(s => s.avg_hr).reduce((a, s) => a + s.avg_hr, 0) / sessions.filter(s => s.avg_hr).length)
+              : null
+            const totalTrimp = sessions.reduce((acc, s) => acc + (s.trimp || 0), 0)
+            return (
+              <div className='grid grid-cols-3 gap-3'>
+                {[
+                  { icon: 'tabler-run',        label: 'Sessões participadas', value: sessions.length,                       color: 'text-primary' },
+                  { icon: 'tabler-flame',      label: 'Total kcal',           value: totalCalories ? `${totalCalories} kcal` : '—', color: 'text-warning' },
+                  { icon: 'tabler-heart-rate', label: 'FC média geral',       value: avgHr ? `${avgHr} bpm` : '—',          color: 'text-error'   },
+                ].map(st => (
+                  <div key={st.label} className='rounded-xl p-4 text-center shadow-sm'
+                    style={{ backgroundColor: 'var(--mui-palette-background-paper)' }}>
+                    <i className={`${st.icon} text-2xl ${st.color} mb-1`} />
+                    <p className='text-lg font-bold'>{st.value}</p>
+                    <p className='text-xs' style={{ color: 'var(--mui-palette-text-secondary)' }}>{st.label}</p>
+                  </div>
+                ))}
+              </div>
+            )
+          })()}
+
+          {/* Lista de sessões */}
+          <Card
+            title={`Histórico de Participações${sessions.length ? ` — ${sessions.length} sessão${sessions.length > 1 ? 'ões' : ''}` : ''}`}
+            icon='tabler-history'
+          >
+            {sessions.length ? (
+              <div className='flex flex-col gap-3'>
+                {sessions.map((s, i) => <SessionCard key={s.session_id ?? i} s={s} />)}
+              </div>
+            ) : (
+              <div className='flex flex-col items-center py-10 gap-3'>
+                <i className='tabler-calendar-off text-5xl' style={{ color: 'var(--mui-palette-text-disabled)' }} />
+                <p className='text-sm' style={{ color: 'var(--mui-palette-text-secondary)' }}>
+                  Nenhuma sessão participada ainda
+                </p>
+                <p className='text-xs' style={{ color: 'var(--mui-palette-text-disabled)' }}>
+                  As sessões aparecem aqui após o atleta fazer check-in
+                </p>
+              </div>
+            )}
+          </Card>
+        </div>
       )}
 
       {/* Tab: Daily Logs */}
