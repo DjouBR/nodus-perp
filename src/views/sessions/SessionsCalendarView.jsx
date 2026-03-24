@@ -83,8 +83,12 @@ export default function SessionsCalendarView() {
 
   useEffect(() => { fetchSessions(); fetchTypes() }, [])
 
+  // Filtra por tipo ativo. Sessões sem tipo (session_type_id null) são sempre exibidas.
   const filteredEvents = activeTypes.length
-    ? events.filter(e => activeTypes.includes(e.extendedProps.session_type_id))
+    ? events.filter(e => {
+        const typeId = e.extendedProps.session_type_id
+        return typeId == null || activeTypes.includes(typeId)
+      })
     : events
 
   const handleEventClick = ({ event }) => {

@@ -18,8 +18,6 @@ import Tabs from '@mui/material/Tabs'
 import Tab from '@mui/material/Tab'
 import CircularProgress from '@mui/material/CircularProgress'
 
-// Status labels por role-aware: atleta vê 'Aberta', staff vê 'Confirmada'
-// Este componente é exclusivo de atletas → sempre 'Aberta'
 const STATUS_LABELS = {
   scheduled: { label: 'Aberta',       color: 'primary' },
   active:    { label: 'Em andamento', color: 'success' },
@@ -40,14 +38,9 @@ function formatTime(dt) {
   return new Date(dt).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })
 }
 
+// Check-in permitido: sessão não cancelada e não finalizada
 function canCheckIn(s) {
-  if (s.status === 'cancelled' || s.status === 'finished') return false
-  const now   = new Date()
-  const start = new Date(s.start_datetime)
-  const end   = new Date(s.end_datetime)
-  const isToday  = start.toDateString() === now.toDateString()
-  const isActive = now >= start && now < end
-  return isToday || isActive
+  return s.status !== 'cancelled' && s.status !== 'finished'
 }
 
 function SessionDetailDialog({ session: s, open, onClose, onCheckIn, checkInLoading }) {
@@ -212,7 +205,7 @@ function SessionCard({ session: s, onDetail, onCheckIn, checkingId }) {
                 sx={{ background: s.type_color ? `${s.type_color}22` : undefined, color: s.type_color }} />
             )}
             <Chip size='small' label={statusInfo.label} color={statusInfo.color} />
-            {/* ── Check-in rápido direto na lista (Ponto 1C) ── */}
+            {/* Botão check-in rápido na lista — visível em qualquer sessão aberta/ativa */}
             {checkInOk && (
               <Button
                 size='small'
@@ -244,12 +237,12 @@ function SessionCard({ session: s, onDetail, onCheckIn, checkingId }) {
 }
 
 export default function SessionsAthleteView() {
-  const [sessions,    setSessions]      = useState([])
-  const [loading,     setLoading]       = useState(true)
-  const [tab,         setTab]           = useState(0)
-  const [detail,      setDetail]        = useState(null)
+  const [sessions,       setSessions]       = useState([])
+  const [loading,        setLoading]        = useState(true)
+  const [tab,            setTab]            = useState(0)
+  const [detail,         setDetail]         = useState(null)
   const [checkInLoading, setCheckInLoading] = useState(false)
-  const [checkingId,  setCheckingId]    = useState(null)
+  const [checkingId,     setCheckingId]     = useState(null)
 
   const fetchSessions = useCallback(async () => {
     setLoading(true)
@@ -282,12 +275,16 @@ export default function SessionsAthleteView() {
     }
   }, [])
 
-  const now      = new Date()
+  const now = new Date()
+
+  // Disponíveis: não canceladas e não finalizadas
   const upcoming = sessions
-    .filter(s => new Date(s.start_datetime) >= now && s.status !== 'cancelled')
+    .filter(s => s.status !== 'cancelled' && s.status !== 'finished')
     .sort((a, b) => new Date(a.start_datetime) - new Date(b.start_datetime))
+
+  // Histórico: apenas sessões em que o atleta fez check-in
   const past = sessions
-    .filter(s => new Date(s.start_datetime) < now || s.status === 'finished' || s.status === 'cancelled')
+    .filter(s => s.checked_in === 1)
     .sort((a, b) => new Date(b.start_datetime) - new Date(a.start_datetime))
 
   const listed = tab === 0 ? upcoming : past
@@ -319,7 +316,7 @@ export default function SessionsAthleteView() {
         <Box className='flex flex-col items-center justify-center py-16 gap-3'>
           <i className={`${tab === 0 ? 'tabler-calendar-off' : 'tabler-history'} text-5xl text-secondary opacity-40`} />
           <Typography variant='body1' color='textSecondary'>
-            {tab === 0 ? 'Nenhuma sessão disponível' : 'Nenhuma sessão no histórico'}
+            {tab === 0 ? 'Nenhuma sessão disponível' : 'Nenhum treino realizado ainda'}
           </Typography>
         </Box>
       ) : (
