@@ -10,12 +10,6 @@ import { randomUUID } from 'crypto'
 const STAFF_ROLES   = ['tenant_admin', 'academy_coach', 'coach']
 const ATHLETE_ROLES = ['athlete', 'academy_athlete', 'coach_athlete']
 
-/**
- * Calcula o status real da sessão com base nos horários.
- * OPÇÃO A — on-the-fly (sem atualizar o banco).
- * TODO (Fase 16): substituir por Opção B — cron job que atualiza o banco a cada 5 min.
- * O status 'cancelled' é sempre preservado (definido manualmente pelo coach).
- */
 function computeStatus(row) {
   if (row.status === 'cancelled') return 'cancelled'
   const now   = Date.now()
@@ -31,7 +25,8 @@ function tenantFilter(user) {
   return eq(training_sessions.tenant_id, user.tenant_id)
 }
 
-const SESSION_SELECT_FIELDS = {
+// Campos sem checked_in — usado para staff (não há join com session_athletes)
+const SESSION_SELECT_STAFF = {
   id:                  training_sessions.id,
   name:                training_sessions.name,
   start_datetime:      training_sessions.start_datetime,
@@ -45,11 +40,17 @@ const SESSION_SELECT_FIELDS = {
   coach_id:            training_sessions.coach_id,
   session_type_id:     training_sessions.session_type_id,
   recurrence_group_id: training_sessions.recurrence_group_id,
-  checked_in:          session_athletes.checked_in,
+  recurrence_rule:     training_sessions.recurrence_rule,
   coach_name:          users.name,
   type_name:           session_types.name,
   type_color:          session_types.color,
   type_icon:           session_types.icon,
+}
+
+// Campos com checked_in — usado para atletas (há join com session_athletes)
+const SESSION_SELECT_ATHLETE = {
+  ...SESSION_SELECT_STAFF,
+  checked_in: session_athletes.checked_in,
 }
 
 // GET /api/sessions
@@ -63,7 +64,7 @@ export async function GET(req) {
     // ── Atleta independente: só vê as próprias sessões (INNER JOIN) ──
     if (role === 'athlete') {
       const rows = await db
-        .select(SESSION_SELECT_FIELDS)
+        .select(SESSION_SELECT_ATHLETE)
         .from(session_athletes)
         .innerJoin(training_sessions, eq(training_sessions.id, session_athletes.session_id))
         .leftJoin(users,         eq(training_sessions.coach_id,        users.id))
@@ -75,15 +76,11 @@ export async function GET(req) {
     }
 
     // ── Aluno de academia / coach_athlete: vê TODAS as sessões do tenant ──
-    // LEFT JOIN em session_athletes apenas para preencher checked_in quando existir.
     if (role === 'academy_athlete' || role === 'coach_athlete') {
       const { tenant_id: tenantId } = session.user
 
       const rows = await db
-        .select({
-          ...SESSION_SELECT_FIELDS,
-          recurrence_rule: training_sessions.recurrence_rule,
-        })
+        .select(SESSION_SELECT_ATHLETE)
         .from(training_sessions)
         .leftJoin(
           session_athletes,
@@ -105,16 +102,13 @@ export async function GET(req) {
       return NextResponse.json(rows.map(r => ({ ...r, status: computeStatus(r) })))
     }
 
-    // ── Staff: retorna todas as sessões do tenant/coach ──
+    // ── Staff: retorna todas as sessões do tenant/coach (sem join em session_athletes) ──
     if (!STAFF_ROLES.includes(role)) {
       return NextResponse.json({ error: 'Acesso negado' }, { status: 403 })
     }
 
     const sessions = await db
-      .select({
-        ...SESSION_SELECT_FIELDS,
-        recurrence_rule: training_sessions.recurrence_rule,
-      })
+      .select(SESSION_SELECT_STAFF)
       .from(training_sessions)
       .leftJoin(users,         eq(training_sessions.coach_id,        users.id))
       .leftJoin(session_types, eq(training_sessions.session_type_id, session_types.id))

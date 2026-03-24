@@ -4,13 +4,13 @@ import { authOptions } from '@/libs/auth'
 import { db } from '@/lib/db/index.js'
 import { session_athletes, training_sessions } from '@/lib/db/schema/sessions'
 import { eq, and } from 'drizzle-orm'
+import { randomUUID } from 'crypto'
 
 const ATHLETE_ROLES = ['athlete', 'academy_athlete', 'coach_athlete']
 
 // PUT /api/sessions/[id]/checkin
 // Alterna o check-in do atleta logado na sessão.
-// - Só possível se a sessão estiver 'active' ou agendada para hoje.
-// - checked_in 0 → 1 (check-in) | 1 → 0 (desfazer check-in)
+// Para academy_athlete / coach_athlete: inscreve automaticamente se ainda não estiver.
 export async function PUT(req, { params }) {
   const session = await getServerSession(authOptions)
   if (!session) return NextResponse.json({ error: 'Não autorizado' }, { status: 401 })
@@ -24,16 +24,32 @@ export async function PUT(req, { params }) {
   const { id: sessionId } = await params
 
   try {
-    // Verifica se a sessão existe e se o atleta está inscrito
-    const [enrollment] = await db
+    // Busca a sessão para validações básicas
+    const [trainingSession] = await db
       .select({
-        checked_in:     session_athletes.checked_in,
+        status:         training_sessions.status,
         start_datetime: training_sessions.start_datetime,
         end_datetime:   training_sessions.end_datetime,
-        status:         training_sessions.status,
       })
+      .from(training_sessions)
+      .where(eq(training_sessions.id, sessionId))
+
+    if (!trainingSession) {
+      return NextResponse.json({ error: 'Sessão não encontrada' }, { status: 404 })
+    }
+
+    if (trainingSession.status === 'cancelled') {
+      return NextResponse.json({ error: 'Não é possível fazer check-in em sessão cancelada' }, { status: 400 })
+    }
+
+    if (trainingSession.status === 'finished') {
+      return NextResponse.json({ error: 'Não é possível fazer check-in em sessão finalizada' }, { status: 400 })
+    }
+
+    // Busca enrollment existente
+    const [enrollment] = await db
+      .select({ checked_in: session_athletes.checked_in })
       .from(session_athletes)
-      .innerJoin(training_sessions, eq(training_sessions.id, session_athletes.session_id))
       .where(
         and(
           eq(session_athletes.session_id, sessionId),
@@ -42,25 +58,19 @@ export async function PUT(req, { params }) {
       )
 
     if (!enrollment) {
+      // Auto-inscrição: academy_athlete / coach_athlete vêem todas as sessões sem inscrição prévia
+      if (role === 'academy_athlete' || role === 'coach_athlete') {
+        await db.insert(session_athletes).values({
+          id:         randomUUID(),
+          session_id: sessionId,
+          athlete_id: userId,
+          checked_in: 1,
+        })
+        return NextResponse.json({ checked_in: 1 })
+      }
+
+      // athlete independente precisa de inscrição prévia
       return NextResponse.json({ error: 'Você não está inscrito nesta sessão' }, { status: 404 })
-    }
-
-    if (enrollment.status === 'cancelled') {
-      return NextResponse.json({ error: 'Não é possível fazer check-in em sessão cancelada' }, { status: 400 })
-    }
-
-    // Verifica se a sessão é hoje ou está ativa
-    const now   = new Date()
-    const start = new Date(enrollment.start_datetime)
-    const isToday  = start.toDateString() === now.toDateString()
-    const isActive = enrollment.status === 'active' ||
-                     (now >= start && now < new Date(enrollment.end_datetime))
-
-    if (!isToday && !isActive) {
-      return NextResponse.json(
-        { error: 'Check-in só disponível no dia da sessão' },
-        { status: 400 }
-      )
     }
 
     // Toggle: 0 → 1 ou 1 → 0
