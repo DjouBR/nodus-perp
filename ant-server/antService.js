@@ -9,6 +9,11 @@ import { GarminStick2, HeartRateScanner } from 'ant-plus-next'
  * - Recebe dados de TODOS os frequencímetros ANT+ na área
  * - Sem limite de dispositivos (42+)
  * - Baixa latência (~1 segundo)
+ *
+ * Comportamento sem antena USB:
+ * - start() retorna false (não lança erro)
+ * - O servidor HTTP/WS sobe normalmente
+ * - Conecte a antena e chame POST /ant/start para iniciar
  */
 export class AntService {
   constructor() {
@@ -25,53 +30,62 @@ export class AntService {
   }
 
   /**
-   * Inicia o serviço ANT+ em Continuous Scanning Mode
+   * Inicia o serviço ANT+ em Continuous Scanning Mode.
+   *
+   * @returns {Promise<boolean>} true se iniciou com sucesso, false se a antena não foi encontrada
    */
   async start() {
     if (this.isRunning) {
       console.log('[ANT+] Service already running')
-      return
+      return true
     }
 
-    try {
-      console.log('[ANT+] Starting ANT+ stick in CONTINUOUS SCANNING mode...')
-      this.stick = new GarminStick2()
+    console.log('[ANT+] Starting ANT+ stick in CONTINUOUS SCANNING mode...')
+    this.stick = new GarminStick2()
 
-      await new Promise((resolve, reject) => {
-        this.stick.on('startup', () => {
-          console.log('[ANT+] Stick started successfully')
-          resolve()
-        })
-
-        this.stick.on('shutdown', () => {
-          console.log('[ANT+] Stick shutdown')
-          this.isRunning = false
-        })
-
-        if (!this.stick.open()) {
-          reject(new Error('Failed to open ANT+ stick'))
-        }
-      })
-
-      console.log('[ANT+] Creating Heart Rate Scanner (Continuous Scanning Mode)...')
-      this.scanner = new HeartRateScanner(this.stick)
-
-      // Escuta eventos de dados de TODOS os dispositivos em range
-      // O DeviceId fica dentro do objeto data (HeartRateScanState)
-      this.scanner.on('heartRateData', (data) => {
-        this.handleHeartRateData(data)
-      })
-
-      console.log('[ANT+] Starting continuous scan for ALL heart rate monitors...')
-      await this.scanner.scan()
-
-      this.isRunning = true
-      console.log('[ANT+] Continuous Scanning Mode active - listening to ALL heart rate monitors in range')
-      console.log('[ANT+] Service started, ready to receive data from 42+ devices')
-    } catch (error) {
-      console.error('[ANT+] Failed to start service:', error)
-      throw error
+    // stick.open() retorna false imediatamente se a antena não estiver conectada
+    // Tratamos isso como erro não-fatal: servidor continua rodando sem ANT+
+    const opened = this.stick.open()
+    if (!opened) {
+      console.warn('[ANT+] USB stick not found or could not be opened.')
+      console.warn('[ANT+] Plug the ANT+ stick and call POST /ant/start to retry.')
+      this.stick = null
+      return false
     }
+
+    // Aguarda o evento 'startup' que confirma que o stick está pronto
+    await new Promise((resolve, reject) => {
+      const timeout = setTimeout(() => {
+        reject(new Error('ANT+ stick startup timeout (5s)'))
+      }, 5000)
+
+      this.stick.on('startup', () => {
+        clearTimeout(timeout)
+        console.log('[ANT+] Stick started successfully')
+        resolve()
+      })
+
+      this.stick.on('shutdown', () => {
+        console.log('[ANT+] Stick shutdown')
+        this.isRunning = false
+      })
+    })
+
+    console.log('[ANT+] Creating Heart Rate Scanner (Continuous Scanning Mode)...')
+    this.scanner = new HeartRateScanner(this.stick)
+
+    // Escuta eventos de dados de TODOS os dispositivos em range
+    this.scanner.on('heartRateData', (data) => {
+      this.handleHeartRateData(data)
+    })
+
+    console.log('[ANT+] Starting continuous scan for ALL heart rate monitors...')
+    await this.scanner.scan()
+
+    this.isRunning = true
+    console.log('[ANT+] Continuous Scanning Mode active - listening to ALL heart rate monitors in range')
+    console.log('[ANT+] Service started, ready to receive data from 42+ devices')
+    return true
   }
 
   /**
@@ -101,10 +115,10 @@ export class AntService {
     }
 
     const heartRateData = {
-      deviceId: deviceId,
+      deviceId:  deviceId,
       heartRate: data.ComputedHeartRate || 0,
       beatCount: data.BeatCount || 0,
-      beatTime: data.BeatTime || 0,
+      beatTime:  data.BeatTime  || 0,
       timestamp: Date.now(),
     }
 
