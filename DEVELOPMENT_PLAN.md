@@ -15,7 +15,7 @@
 | Autenticação | NextAuth.js v4 (JWT + OAuth) |
 | Estilo | Tailwind CSS v4 + MUI |
 | Gráficos | ApexCharts (react-apexcharts) |
-| Hardware | ANT+ USB via WebSocket |
+| Hardware | ANT+ USB via `ant-plus-next` + servidor Node.js dedicado |
 | Changelog | release-it + @release-it/conventional-changelog |
 | Deploy | VPS (Hetzner CX22 recomendado) — ver seção Infraestrutura |
 
@@ -98,6 +98,7 @@
   - Senha padrão: `nodus@123` — zonas de FC calculadas automaticamente
 - [x] `GET /api/athletes/[id]` — perfil completo (user + profile + sensor + logs + ACWR + sessões)
   - Aceita os 3 roles: `athlete`, `academy_athlete`, `coach_athlete`
+  - `recent_sessions`: apenas sessões com `checked_in = 1`, com join em `session_types` (cor + nome), limit 20
 - [x] `PUT /api/athletes/[id]` — atualiza user + profile, recalcula zonas de FC
   - `nullifyNum()` aplicado em todos os campos int/float — evita `ER_TRUNCATED_WRONG_VALUE`
   - Upsert automático: cria `athlete_profiles` se não existir
@@ -111,6 +112,8 @@
   - Campos obrigatórios com `*` e validação frontend para gênero e data de nascimento
 - [x] `AthleteDetailView` — hero card, zonas FC, ACWR, sensor ANT+, sessões, daily logs
   - Props: `athleteId`, `backPath`, `canEdit` (usa session se omitido)
+  - **Tab Sessões**: `SessionCard` expansível com data visual, métricas, barra de zonas FC, estado vazio
+  - **Resumo estatístico** no topo da tab: total sessões, kcal acumuladas, FC média geral
 - [x] `NodusDeleteDialog` — diálogo genérico com 3 botões: Cancelar / Backup e excluir / Apenas excluir
 - [x] `NodusConfirmDialog` — diálogo de confirmação para Inativar/Reativar (toggle real)
 - [x] `NodusToast` — snackbar MUI para feedback de sucesso/erro/aviso
@@ -316,6 +319,12 @@
 - [x] `sessions/page.jsx` — renderiza view correta por role:
   - `athlete / academy_athlete / coach_athlete` → `SessionsAthleteView`
   - Demais roles → `SessionsCalendarView`
+- [x] **Histórico de sessões no `AthleteDetailView`** (24/03/2026)
+  - `SessionCard` expansível: bloco de data, nome + tipo (badge colorido), hora, FC méd/máx, TRIMP, kcal
+  - Ao expandir: grid de métricas + barra de zonas FC (Z1→Z5) com percentuais
+  - Resumo no topo da tab: total sessões, kcal acumuladas, FC média geral
+  - Estado vazio com mensagem explicativa
+  - API: filtro `checked_in = 1` + join `session_types` + limit 20
 
 ### Bugs corrigidos nesta fase (19-24/03/2026)
 
@@ -333,14 +342,10 @@
 ### Pendências desta fase / próximas evoluções
 
 > **Nota sobre o Histórico de Sessões:**
-> Atualmente a aba "Histórico" em `/sessions` mostra sessões com `checked_in = 1` (atleta marcou presença
-> antes/durante a aula). O comportamento ideal futuro é:
-> - Aparecer no histórico **somente após** a sessão ter ocorrido (`end_datetime < now`)
-> - Confirmação de participação via vínculo com dispositivo ANT+ (início/fim de sessão com dado de FC)
-> - Isso será implementado na **Fase 7 (Monitoramento em Tempo Real)** quando o dispositivo puder
->   confirmar a presença real do atleta durante a sessão.
+> O comportamento ideal futuro (Fase 7) é confirmar presença via dado de FC do dispositivo ANT+.
+> - Check-in automático ao detectar FC do atleta durante a janela da sessão
+> - Histórico com `checked_in = 1` E `end_datetime < now` (sessão realmente encerrada)
 
-- [ ] Histórico de sessões no perfil do atleta (`AthleteDetailView`) — mostrar sessões com `checked_in = 1`
 - [ ] Cancelamento manual de sessão pelo coach (chip `cancelled` já suportado na view)
 - [ ] Confirmação automática de presença via dado de FC do dispositivo ANT+ (Fase 7)
 - [ ] Cron job para atualizar status de sessões no banco (Fase 16 — deploy)
@@ -373,17 +378,140 @@
 
 ---
 
-## 🔲 FASE 7 — Monitoramento em Tempo Real (Core do NODUS)
+## 🔲 FASE 7 — Monitoramento ANT+ em Tempo Real (Core do NODUS)
 
-- [ ] Driver ANT+ USB (integração com dispositivo)
-- [ ] WebSocket server para streaming de FC
-- [ ] Tela `/monitoring` — exibição em tempo real por atleta
-- [ ] Zonas de FC com alertas visuais
-- [ ] Tela TV (`/academy/tvscreen`) — exibição para academia
-- [ ] Persistência dos dados de FC no banco (tabela `heart_rate`)
-- [ ] **Confirmação automática de presença** via dado de FC do dispositivo durante a sessão
-  - Ao detectar FC do atleta durante a janela da sessão → `checked_in = 1` automático
-  - Substituirá o check-in manual para sessões monitoradas
+> **Base de referência:** repositório `heart_rate_monitor` (DjouBR) — projeto funcional com:
+> - `AntService` em **Continuous Scanning Mode** via `ant-plus-next` + `GarminStick2`
+> - `HeartRateWebSocketServer` via lib `ws` (Node.js nativo)
+> - Cálculo de zonas de FC, calorias acumuladas e persistência no banco
+> - Arquitetura: servidor Node.js separado (`server/`) + cliente React (`client/`) via WebSocket
+>
+> **Estratégia de integração no NODUS:** manter a arquitetura híbrida — servidor ANT+/WS
+> roda como processo Node.js separado (porta própria), o Next.js se conecta via WebSocket client.
+
+### Pré-requisitos
+- [ ] Instalar dependência: `npm install ant-plus-next ws`
+- [ ] Verificar que o Zadig (driver WinUSB) já está instalado para a antena USB Garmin
+  - Windows: driver já instalado no projeto `heart_rate_monitor` ✅
+- [ ] Garantir que `sensors.serial` no banco contém o `DeviceId` ANT+ numérico de cada atleta
+  - Migração/seed pode ser necessária para popular com valores reais
+
+### Etapa 7.1 — Servidor ANT+/WebSocket (adaptação do `heart_rate_monitor`)
+
+> Criar `ant-server/` na raiz do NODUS — processo Node.js independente do Next.js.
+
+- [ ] `ant-server/antService.js` — portado de `server/antService.ts` (TypeScript → JS ou manter TS)
+  - Singleton `AntService` com **Continuous Scanning Mode** (`HeartRateScanner`)
+  - Métodos: `start()`, `stop()`, `scanForDevice(deviceId)`, `onHeartRateData(cb)`
+  - Já suporta 42+ dispositivos simultâneos sem limite de canais
+- [ ] `ant-server/websocketServer.js` — adaptado de `server/websocketServer.ts`
+  - Trocar `getStudentByDeviceId()` por query no banco do NODUS (via Drizzle ou mysql2 direto)
+    - Buscar atleta por `sensors.serial = deviceId` (JOIN com `users` + `athlete_profiles`)
+  - Cálculo de zona usando `athlete_profiles.hr_max` (já existe no NODUS) em vez de `220 - age`
+  - Acumular calorias por atleta (mesma lógica do projeto original)
+  - Broadcast: mesmo formato `{ type: 'heartrate', data: StudentHeartRateData }`
+  - Adicionar suporte a `session_id` — vincular dados de FC à sessão ativa
+- [ ] `ant-server/index.js` — entry point do servidor (HTTP + WebSocket na porta `3001`)
+  - Iniciar `AntService.start()` → só se a antena USB estiver conectada
+  - Graceful shutdown: `SIGTERM` fecha o stick ANT+ corretamente
+- [ ] `ant-server/package.json` — dependências: `ant-plus-next`, `ws`, `mysql2` (ou reusar Drizzle)
+
+### Etapa 7.2 — Persistência de FC no banco (tabela `heart_rate`)
+
+> A tabela `heart_rate` já existe no schema do NODUS. Apenas adaptar o `createHeartRateLog()`.
+
+- [ ] Verificar colunas existentes na tabela `heart_rate` e garantir compatibilidade:
+  - `id`, `session_id`, `athlete_id`, `heart_rate`, `zone`, `calories`, `timestamp`
+  - Se faltar coluna → criar migration
+- [ ] Persistência no banco a cada leitura ANT+ (async, sem bloquear o broadcast)
+- [ ] Rate limit de gravação: gravar no banco a cada **5 segundos por atleta** (evitar flood)
+  - Em memória: salvar sempre para o WebSocket; no banco: throttle de 5s
+- [ ] `PUT /api/sessions/[id]/start` — marca sessão como `active` + registra `start_datetime` real
+- [ ] `PUT /api/sessions/[id]/finish` — marca sessão como `finished` + registra `end_datetime` real
+  - Ao finalizar: calcular e salvar métricas agregadas em `session_athletes` (avg_hr, max_hr, trimp, calorias, time_z1..z5)
+
+### Etapa 7.3 — Tela de Monitoramento em Tempo Real (`/monitoring`)
+
+> Tela principal para staff (coach/admin) ver todos os atletas da sessão em tempo real.
+
+- [ ] Hook `useAntWebSocket(sessionId)` — client-side WebSocket hook
+  - Conecta em `ws://localhost:3001/ws/heartrate`
+  - Recebe `initial_data` + updates em tempo real
+  - Reconexão automática com back-off exponencial
+  - Estado: `{ athletes: Map<id, AthleteRealtimeData>, connected, error }`
+- [ ] `MonitoringView` — grade de cards por atleta (similar ao projeto original)
+  - Card por atleta: nome, avatar, FC atual (grande), zona colorida (Z1→Z5), calorias, % FC máx
+  - Badge de zona pulsante quando Z4/Z5 (alerta visual)
+  - Ordenação: por zona (maior primeiro) ou por nome
+  - Atleta offline (sem dado há >10s): card cinza com ícone de sinal perdido
+- [ ] Seletor de sessão ativa — ao entrar na tela, escolher qual sessão monitorar
+  - Filtra atletas pelo `session_id` selecionado
+- [ ] Botões: "Iniciar Sessão" / "Encerrar Sessão" → chama `PUT /api/sessions/[id]/start|finish`
+- [ ] Permissões: `tenant_admin`, `coach`, `academy_coach` — isolamento por tenant
+
+### Etapa 7.4 — Tela TV (`/monitoring/tvscreen`)
+
+> Modo de exibição para telão da academia — sem autenticação necessária (token de sala).
+
+- [ ] Layout fullscreen: grade maior, sem sidebar, fundo escuro
+- [ ] Mesmo WebSocket do `/monitoring` — só visual diferente
+- [ ] Configurável: número de colunas, tamanho dos cards, exibir/ocultar nome
+- [ ] Token de sala: URL com `?room=TOKEN` gerada pelo admin (sem login necessário)
+- [ ] Auto-refresh se conexão cair
+
+### Etapa 7.5 — Check-in Automático via FC
+
+> Substitui o check-in manual quando a sessão está sendo monitorada pelo ANT+.
+
+- [ ] Ao detectar FC de um atleta durante a janela da sessão → `session_athletes.checked_in = 1` automático
+  - Lógica no servidor ANT+: se `now >= session.start_datetime - 5min` E `session.status = 'active'`
+  - Evitar chamadas duplicadas: só fazer o update uma vez por atleta por sessão
+- [ ] Notificar via WebSocket: `{ type: 'checkin_auto', athleteId, sessionId }`
+  - A tela de monitoramento exibe badge "✓ Presença confirmada" no card do atleta
+
+### Etapa 7.6 — Dashboard em Tempo Real (atualização das métricas)
+
+> Após a Fase 7, os dashboards ganham dados ao vivo.
+
+- [ ] `DashboardAcademia` — card de FC média ao vivo (via WebSocket ou polling curto de 5s)
+- [ ] `DashboardCoach` — card de FC dos atletas na sessão ativa
+- [ ] `DashboardAthlete` — card "Minha FC agora" quando estiver em sessão ativa
+
+### Ordem de desenvolvimento recomendada
+
+```
+7.1 Servidor ANT+/WS  →  7.2 Persistência banco  →  7.3 Tela /monitoring
+         ↓
+    7.4 Tela TV  →  7.5 Check-in automático  →  7.6 Dashboard ao vivo
+```
+
+### Dependências e comandos
+
+```bash
+# No NODUS (raiz)
+npm install ws
+
+# No ant-server/
+npm install ant-plus-next ws mysql2
+
+# Rodar em paralelo (desenvolvimento)
+# Terminal 1: Next.js
+npm run dev
+
+# Terminal 2: Servidor ANT+
+node ant-server/index.js
+```
+
+### Decisões de arquitetura confirmadas
+
+| Decisão | Escolha | Motivo |
+|---|---|---|
+| Driver ANT+ | `ant-plus-next` | Já usado e funcionando no `heart_rate_monitor` |
+| Modo de scanning | Continuous Scanning (`HeartRateScanner`) | Suporta 42+ dispositivos sem limite de canais |
+| Servidor WS | Node.js `ws` nativo na porta 3001 | WebSocket não suportado em API routes do Next.js |
+| Persistência | Throttle 5s por atleta | Evita flood no MySQL; em memória é sempre ao vivo |
+| Check-in | Manual agora → Automático via FC na Fase 7 | Progressive enhancement |
+| TV Screen | Token de sala sem login | UX: telão não precisa de autenticação |
 
 ---
 
@@ -493,6 +621,7 @@
 |---|---|
 | Servidor | **Hetzner CX22** — 2 vCPU, 4 GB RAM, 40 GB SSD, ~€ 3,79/mês |
 | App | Next.js rodando via **PM2** (processo persistente) |
+| ANT+ Server | Processo separado via **PM2** também (porta 3001) |
 | Proxy reverso | **Nginx** + Certbot (HTTPS gratuito via Let's Encrypt) |
 | Banco de dados | **MySQL 8** local no VPS (não exposto externamente) |
 | Deploy automático | **GitHub Actions** — `git push main` → deploy no servidor |
@@ -621,6 +750,13 @@
 | Histórico | Sessões com `checked_in = 1` | Sessões com `checked_in = 1` **E** `end_datetime < now` |
 | Confirmação de presença | Ato de clicar no botão | Dado de FC detectado durante a sessão |
 
+### Arquitetura ANT+ (Fase 7)
+- **Servidor ANT+**: processo Node.js separado em `ant-server/` na porta **3001**
+- **Lib**: `ant-plus-next` com `GarminStick2` + `HeartRateScanner` em Continuous Scanning Mode
+- **DeviceId**: o campo `sensors.serial` do NODUS armazena o ID numérico ANT+ de cada atleta
+- **WebSocket path**: `ws://localhost:3001/ws/heartrate` (mesmo padrão do projeto original)
+- **Throttle banco**: gravação a cada 5s por atleta — em memória sempre ao vivo para o WS
+
 ---
 
-*Última atualização: 24/03/2026*
+*Última atualização: 24/03/2026 — Fase 6 concluída ✅ | Fase 7 planejada 🔲*
