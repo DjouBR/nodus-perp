@@ -17,9 +17,19 @@
  * Variáveis de ambiente necessárias (mesmas do NODUS):
  *   DATABASE_URL=mysql://user:pass@host:3306/nodus_db
  *   ANT_SERVER_PORT=3001   (opcional, padrão 3001)
+ *
+ * O .env é carregado da raiz do projeto NODUS (diretório pai).
+ * Não é necessário criar um .env separado dentro de ant-server/.
  */
 
-import 'dotenv/config'
+import { config } from 'dotenv'
+import { resolve, dirname } from 'path'
+import { fileURLToPath } from 'url'
+
+// Carrega o .env da raiz do NODUS (pasta pai do ant-server/)
+const __dirname = dirname(fileURLToPath(import.meta.url))
+config({ path: resolve(__dirname, '../.env') })
+
 import http from 'http'
 import { initDb, getAllActiveSensors, closeDb } from './db.js'
 import { getAntService } from './antService.js'
@@ -172,6 +182,8 @@ process.on('SIGINT',  () => shutdown('SIGINT'))
 // ─────────────────────────────────────────────────────────────
 
 async function main() {
+  console.log(`[Server] Loading .env from: ${resolve(__dirname, '../.env')}`)
+
   // 1. Inicializa pool MySQL
   initDb()
 
