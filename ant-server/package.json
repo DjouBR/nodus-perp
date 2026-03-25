@@ -9,7 +9,7 @@
     "dev": "node --watch index.js"
   },
   "dependencies": {
-    "ant-plus-next": "^1.0.0",
+    "ant-plus-next": "^0.3.2",
     "dotenv": "^16.0.0",
     "mysql2": "^3.0.0",
     "ws": "^8.0.0"
