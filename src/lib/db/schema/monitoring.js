@@ -2,6 +2,10 @@ import { mysqlTable, varchar, tinyint, timestamp, int, mysqlEnum } from 'drizzle
 
 // ───────────────────────────────────────────────────────────────────
 // SENSORS — cintos ANT+ e sensores BLE
+//
+// athlete_id é opcional: representa o ÚLTIMO atleta que usou o sensor
+// (histório/referência). O vínculo real por sessão fica em
+// session_athletes.sensor_id (atribuído no check-in).
 // ───────────────────────────────────────────────────────────────────
 export const sensors = mysqlTable('sensors', {
   id:              varchar('id', { length: 36 }).primaryKey(),
@@ -9,7 +13,7 @@ export const sensors = mysqlTable('sensors', {
   unit_id:         varchar('unit_id', { length: 36 }),
   serial:          varchar('serial', { length: 50 }).notNull().unique(),
   protocol:        mysqlEnum('protocol', ['ANT+', 'BLE', 'dual']).notNull().default('ANT+'),
-  athlete_id:      varchar('athlete_id', { length: 36 }),               // FK users.id (atleta vinculado)
+  athlete_id:      varchar('athlete_id', { length: 36 }),               // último atleta (referência histórica)
   battery_pct:     int('battery_pct'),
   last_seen:       timestamp('last_seen'),
   is_active:       tinyint('is_active').notNull().default(1),

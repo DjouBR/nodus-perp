@@ -1,4 +1,4 @@
-import { mysqlTable, varchar, text, tinyint, timestamp, datetime, int, float, mysqlEnum, date } from 'drizzle-orm/mysql-core'
+import { mysqlTable, varchar, text, tinyint, timestamp, datetime, int, float, mysqlEnum, date, decimal } from 'drizzle-orm/mysql-core'
 
 // ───────────────────────────────────────────────────────────────────
 // SESSION_TYPES
@@ -43,17 +43,22 @@ export const training_sessions = mysqlTable('training_sessions', {
 
 // ───────────────────────────────────────────────────────────────────
 // SESSION_ATHLETES
+// Representa a presença/check-in de um atleta em uma sessão.
+// sensor_id: preenchido no CHECK-IN — NÃO é vínculo fixo.
+// O mesmo atleta pode usar sensores diferentes em aulas diferentes.
 // ───────────────────────────────────────────────────────────────────
 export const session_athletes = mysqlTable('session_athletes', {
   id:              varchar('id', { length: 36 }).primaryKey(),
   session_id:      varchar('session_id', { length: 36 }).notNull(),
   athlete_id:      varchar('athlete_id', { length: 36 }).notNull(),
-  sensor_id:       varchar('sensor_id', { length: 36 }),
+  sensor_id:       varchar('sensor_id', { length: 36 }),               // FK sensors.id — atribuído no check-in
   checked_in:      tinyint('checked_in').notNull().default(0),
+  checkin_at:      datetime('checkin_at'),                              // momento do check-in
+  checkout_at:     datetime('checkout_at'),                             // momento da saída (opcional)
   avg_hr:          int('avg_hr'),
   max_hr:          int('max_hr'),
   min_hr:          int('min_hr'),
-  calories:        int('calories'),
+  calories:        decimal('calories', { precision: 10, scale: 2 }),
   trimp:           float('trimp'),
   training_effect: float('training_effect'),
   time_z1_sec:     int('time_z1_sec'),
@@ -66,13 +71,21 @@ export const session_athletes = mysqlTable('session_athletes', {
 
 // ───────────────────────────────────────────────────────────────────
 // SESSION_HR_SERIES
+// Série temporal de FC por atleta por sessão.
+// Gravada pelo ant-server a cada ~5 segundos enquanto a aula está ativa.
+// Permite gráficos de FC do início ao fim da aula.
+//
+// Calendário de retenção: dados brutos por 12 meses;
+// após isso, apenas os agregados em session_athletes são mantidos.
 // ───────────────────────────────────────────────────────────────────
 export const session_hr_series = mysqlTable('session_hr_series', {
   id:           varchar('id', { length: 36 }).primaryKey(),
-  session_id:   varchar('session_id', { length: 36 }).notNull(),
-  athlete_id:   varchar('athlete_id', { length: 36 }).notNull(),
-  timestamp:    datetime('timestamp').notNull(),
-  hr_bpm:       int('hr_bpm').notNull(),
-  hr_zone:      int('hr_zone'),
-  block_type:   varchar('block_type', { length: 30 }),
+  session_id:   varchar('session_id', { length: 36 }).notNull(),        // FK training_sessions.id
+  athlete_id:   varchar('athlete_id', { length: 36 }).notNull(),        // FK users.id
+  sensor_id:    varchar('sensor_id', { length: 36 }),                   // FK sensors.id (qual sensor gravou)
+  timestamp:    datetime('timestamp').notNull(),                        // momento da leitura
+  hr_bpm:       int('hr_bpm').notNull(),                                // FC em bpm
+  hr_zone:      int('hr_zone'),                                         // zona calculada (1-5)
+  calories_acc: decimal('calories_acc', { precision: 10, scale: 2 }),  // calorias acumuladas até este ponto
+  block_type:   varchar('block_type', { length: 30 }),                  // ex: 'warmup', 'main', 'cooldown'
 })
