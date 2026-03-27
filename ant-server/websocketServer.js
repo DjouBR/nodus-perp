@@ -7,9 +7,9 @@ import {
   updateSessionAthleteAggregates,
 } from './db.js'
 
-// ────────────────────────────────────────────────────────────
+// ────────────────────────────────────────────────────────────────────────────
 // HELPERS DE CÁLCULO
-// ────────────────────────────────────────────────────────────
+// ────────────────────────────────────────────────────────────────────────────
 
 function calculateZone(heartRate, maxHeartRate) {
   const pct = (heartRate / maxHeartRate) * 100
@@ -24,9 +24,9 @@ function calculateCaloriesPerMinute(heartRate, weight) {
   return heartRate * weight * 0.00015
 }
 
-// ────────────────────────────────────────────────────────────
+// ────────────────────────────────────────────────────────────────────────────
 // THROTTLE DE PERSISTÊNCIA NO BANCO
-// ────────────────────────────────────────────────────────────
+// ────────────────────────────────────────────────────────────────────────────
 
 const DB_WRITE_INTERVAL_MS = 5000
 const lastDbWrite = new Map()
@@ -41,9 +41,9 @@ function shouldWriteToDb(athleteId) {
   return false
 }
 
-// ────────────────────────────────────────────────────────────
+// ────────────────────────────────────────────────────────────────────────────
 // SERVIDOR WEBSOCKET
-// ────────────────────────────────────────────────────────────
+// ────────────────────────────────────────────────────────────────────────────
 
 export class HeartRateWebSocketServer {
   constructor(server) {
@@ -84,23 +84,14 @@ export class HeartRateWebSocketServer {
     console.log('[WebSocket] Server initialized on path /ws/heartrate')
   }
 
-  // ───────────────────────────────────────────────────────────
+  // ────────────────────────────────────────────────────────────────────────
   // PIPELINE PRINCIPAL
-  // ───────────────────────────────────────────────────────────
+  // ────────────────────────────────────────────────────────────────────────
 
   async handleHeartRateData(data) {
     try {
-      // ─ DEBUG TEMPORÁRIO — remover após validar pipeline ─
-      console.log(`[WS:DEBUG] HR data received: deviceId=${data.deviceId} hr=${data.heartRate}`)
-
       const athlete = await this.resolveAthlete(data.deviceId)
-
-      if (!athlete) {
-        console.log(`[WS:DEBUG] resolveAthlete(${data.deviceId}) => NOT FOUND`)
-        return
-      }
-
-      console.log(`[WS:DEBUG] Resolved => athlete_id=${athlete.athlete_id} session_id=${athlete.session_id} sensor_id=${athlete.sensor_id}`)
+      if (!athlete) return
 
       const maxHr  = athlete.hr_max  || 190
       const weight = parseFloat(athlete.weight_kg) || 70
@@ -133,10 +124,7 @@ export class HeartRateWebSocketServer {
       this.athleteDataCache.set(athlete.athlete_id, athleteData)
       this.broadcast({ type: 'heartrate', data: athleteData })
 
-      console.log(`[WS:DEBUG] Broadcast OK — zone=${zone} calories=${athleteData.calories} session=${athlete.session_id ?? 'none'}`)
-
       if (shouldWriteToDb(athlete.athlete_id)) {
-        console.log(`[WS:DEBUG] Writing to DB...`)
         this.persistAndCheckin(athlete, athleteData, zone, calories).catch((err) => {
           console.error('[WebSocket] Error persisting HR data:', err)
         })
@@ -146,9 +134,9 @@ export class HeartRateWebSocketServer {
     }
   }
 
-  // ───────────────────────────────────────────────────────────
+  // ────────────────────────────────────────────────────────────────────────
   // PERSISTÊNCIA + CHECK-IN
-  // ───────────────────────────────────────────────────────────
+  // ────────────────────────────────────────────────────────────────────────
 
   async persistAndCheckin(athlete, athleteData, zone, calories) {
     const { athlete_id, session_id, sensor_id } = athlete
@@ -156,7 +144,6 @@ export class HeartRateWebSocketServer {
     if (session_id) {
       try {
         await autoCheckin(session_id, athlete_id)
-        console.log(`[WS:DEBUG] autoCheckin OK session=${session_id}`)
       } catch (err) {
         console.warn('[WebSocket] autoCheckin error:', err.message)
       }
@@ -172,13 +159,11 @@ export class HeartRateWebSocketServer {
       calories_acc: parseFloat(calories.toFixed(2)),
       block_type:   null,
     })
-
-    console.log(`[WS:DEBUG] insertHrSeries OK — session_id=${session_id ?? 'null (no persist)'}`)
   }
 
-  // ───────────────────────────────────────────────────────────
+  // ────────────────────────────────────────────────────────────────────────
   // CACHE DE RESOLUÇÃO DE ATLETA (TTL 10s)
-  // ───────────────────────────────────────────────────────────
+  // ────────────────────────────────────────────────────────────────────────
 
   deviceAthleteCache = new Map()
   static ATHLETE_CACHE_TTL_MS = 10_000
@@ -195,9 +180,9 @@ export class HeartRateWebSocketServer {
     return athlete
   }
 
-  // ───────────────────────────────────────────────────────────
+  // ────────────────────────────────────────────────────────────────────────
   // MENSAGENS DE CLIENTES
-  // ───────────────────────────────────────────────────────────
+  // ────────────────────────────────────────────────────────────────────────
 
   handleClientMessage(ws, message) {
     if (message.type === 'ping') {
@@ -239,9 +224,9 @@ export class HeartRateWebSocketServer {
     console.log(`[WebSocket] Aggregates updated and athlete cache cleared.`)
   }
 
-  // ───────────────────────────────────────────────────────────
+  // ────────────────────────────────────────────────────────────────────────
   // BROADCAST + HELPERS
-  // ───────────────────────────────────────────────────────────
+  // ────────────────────────────────────────────────────────────────────────
 
   sendCurrentDataToClient(ws) {
     const allData = Array.from(this.athleteDataCache.values())

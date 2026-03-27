@@ -68,7 +68,15 @@ export default function SessionsCalendarView() {
     try {
       const res  = await fetch('/api/sessions')
       const data = await res.json()
-      setEvents(Array.isArray(data) ? data.map(toCalendarEvent) : [])
+      const newEvents = Array.isArray(data) ? data.map(toCalendarEvent) : []
+      setEvents(newEvents)
+
+      // Força o FullCalendar a reprocessar os eventos imediatamente
+      const calApi = calendarRef.current?.getApi()
+      if (calApi) {
+        calApi.removeAllEvents()
+        newEvents.forEach(e => calApi.addEvent(e))
+      }
     } catch (err) { console.error('fetchSessions', err) }
   }, [])
 
