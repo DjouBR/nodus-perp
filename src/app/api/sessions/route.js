@@ -12,11 +12,14 @@ const ATHLETE_ROLES = ['athlete', 'academy_athlete', 'coach_athlete']
 
 function computeStatus(row) {
   if (row.status === 'cancelled') return 'cancelled'
+  if (row.status === 'finished')  return 'finished'
+  if (row.status === 'active')    return 'active'
+  // Para sessões 'scheduled', usa scheduled_start como referência do calendário
   const now   = Date.now()
-  const start = new Date(row.start_datetime).getTime()
-  const end   = new Date(row.end_datetime).getTime()
-  if (now >= start && now < end)  return 'active'
-  if (now >= end)                 return 'finished'
+  const start = new Date(row.scheduled_start ?? row.start_datetime).getTime()
+  const end   = new Date(row.scheduled_end   ?? row.end_datetime).getTime()
+  if (now >= start && now < end) return 'active'
+  if (now >= end)                return 'finished'
   return 'scheduled'
 }
 
@@ -25,12 +28,14 @@ function tenantFilter(user) {
   return eq(training_sessions.tenant_id, user.tenant_id)
 }
 
-// Campos sem checked_in — usado para staff (não há join com session_athletes)
+// Campos sem checked_in — usado para staff
 const SESSION_SELECT_STAFF = {
   id:                  training_sessions.id,
   name:                training_sessions.name,
   start_datetime:      training_sessions.start_datetime,
   end_datetime:        training_sessions.end_datetime,
+  scheduled_start:     training_sessions.scheduled_start,
+  scheduled_end:       training_sessions.scheduled_end,
   duration_min:        training_sessions.duration_min,
   status:              training_sessions.status,
   capacity:            training_sessions.capacity,
@@ -47,7 +52,7 @@ const SESSION_SELECT_STAFF = {
   type_icon:           session_types.icon,
 }
 
-// Campos com checked_in — usado para atletas (há join com session_athletes)
+// Campos com checked_in — usado para atletas
 const SESSION_SELECT_ATHLETE = {
   ...SESSION_SELECT_STAFF,
   checked_in: session_athletes.checked_in,
@@ -102,7 +107,7 @@ export async function GET(req) {
       return NextResponse.json(rows.map(r => ({ ...r, status: computeStatus(r) })))
     }
 
-    // ── Staff: retorna todas as sessões do tenant/coach (sem join em session_athletes) ──
+    // ── Staff: retorna todas as sessões do tenant/coach ──
     if (!STAFF_ROLES.includes(role)) {
       return NextResponse.json({ error: 'Acesso negado' }, { status: 403 })
     }
@@ -150,24 +155,30 @@ export async function POST(req) {
   const durMin        = duration_min || 60
   const DAY_MAP       = { SUN: 0, MON: 1, TUE: 2, WED: 3, THU: 4, FRI: 5, SAT: 6 }
 
-  const buildRow = (start, groupId = null) => ({
-    id:                   randomUUID(),
-    tenant_id:            finalTenantId,
-    session_type_id:      session_type_id || null,
-    coach_id:             finalCoachId,
-    name,
-    start_datetime:       start,
-    end_datetime:         new Date(start.getTime() + durMin * 60_000),
-    duration_min:         durMin,
-    capacity:             capacity || 30,
-    target_zone_min:      target_zone_min || 2,
-    target_zone_max:      target_zone_max || 4,
-    notes:                notes || null,
-    status:               'scheduled',
-    recurrence_group_id:  groupId,
-    recurrence_rule:      groupId ? recurrence_rule : null,
-    recurrence_end_date:  groupId ? new Date(recurrence_end_date) : null,
-  })
+  // scheduled_start e scheduled_end são imutáveis — guardam o horário original da agenda
+  const buildRow = (start, groupId = null) => {
+    const end = new Date(start.getTime() + durMin * 60_000)
+    return {
+      id:                   randomUUID(),
+      tenant_id:            finalTenantId,
+      session_type_id:      session_type_id || null,
+      coach_id:             finalCoachId,
+      name,
+      start_datetime:       start,        // será sobrescrito pelo cronômetro real no /start
+      end_datetime:         end,          // será sobrescrito pelo cronômetro real no /finish
+      scheduled_start:      start,        // imutável — horário da agenda
+      scheduled_end:        end,          // imutável — horário da agenda
+      duration_min:         durMin,
+      capacity:             capacity || 30,
+      target_zone_min:      target_zone_min || 2,
+      target_zone_max:      target_zone_max || 4,
+      notes:                notes || null,
+      status:               'scheduled',
+      recurrence_group_id:  groupId,
+      recurrence_rule:      groupId ? recurrence_rule : null,
+      recurrence_end_date:  groupId ? new Date(recurrence_end_date) : null,
+    }
+  }
 
   const insertAthletes = async (sessionId, ids) => {
     if (!ids || ids.length === 0) return

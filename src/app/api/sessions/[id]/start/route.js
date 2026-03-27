@@ -1,9 +1,7 @@
 import { NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/libs/auth'
-import { db } from '@/libs/db'
-import { trainingSessions } from '@/db/schema'
-import { eq } from 'drizzle-orm'
+import mysql from 'mysql2/promise'
 
 const STAFF_ROLES = ['tenant_admin', 'coach', 'academy_coach']
 
@@ -14,45 +12,45 @@ export async function PUT(req, { params }) {
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
 
   const { id } = await params
+  const pool = mysql.createPool(process.env.DATABASE_URL)
 
-  // Busca a sessão
-  const [trainingSession] = await db
-    .select({
-      id:             trainingSessions.id,
-      status:         trainingSessions.status,
-      tenant_id:      trainingSessions.tenantId,
-      start_datetime: trainingSessions.startDatetime,
+  try {
+    const [rows] = await pool.query(
+      `SELECT id, status, tenant_id, start_datetime FROM training_sessions WHERE id = ? LIMIT 1`,
+      [id]
+    )
+    const ts = rows[0]
+
+    if (!ts)
+      return NextResponse.json({ error: 'Sessão não encontrada' }, { status: 404 })
+
+    if (session.user.role !== 'super_admin' && ts.tenant_id !== session.user.tenant_id)
+      return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+
+    if (ts.status === 'cancelled')
+      return NextResponse.json({ error: 'Sessão cancelada não pode ser iniciada' }, { status: 400 })
+
+    if (ts.status === 'finished')
+      return NextResponse.json({ error: 'Sessão já foi encerrada' }, { status: 400 })
+
+    if (ts.status === 'active')
+      return NextResponse.json({ error: 'Sessão já está ativa' }, { status: 400 })
+
+    // start_datetime = NOW() — cronômetro real do clique do professor
+    // scheduled_start já foi preenchido na criação e permanece imutável
+    await pool.query(
+      `UPDATE training_sessions
+       SET status = 'active', start_datetime = NOW()
+       WHERE id = ?`,
+      [id]
+    )
+
+    return NextResponse.json({
+      success: true,
+      message: 'Sessão iniciada com sucesso',
+      started_at: new Date().toISOString(),
     })
-    .from(trainingSessions)
-    .where(eq(trainingSessions.id, id))
-    .limit(1)
-
-  if (!trainingSession)
-    return NextResponse.json({ error: 'Sessão não encontrada' }, { status: 404 })
-
-  // Isolamento por tenant
-  if (
-    session.user.role !== 'super_admin' &&
-    trainingSession.tenant_id !== session.user.tenant_id
-  ) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
-
-  if (trainingSession.status === 'cancelled')
-    return NextResponse.json({ error: 'Sessão cancelada não pode ser iniciada' }, { status: 400 })
-
-  if (trainingSession.status === 'finished')
-    return NextResponse.json({ error: 'Sessão já foi encerrada' }, { status: 400 })
-
-  if (trainingSession.status === 'active')
-    return NextResponse.json({ error: 'Sessão já está ativa' }, { status: 400 })
-
-  // Atualiza para active
-  await db
-    .update(trainingSessions)
-    .set({
-      status:         'active',
-      startDatetime:  trainingSession.start_datetime ?? new Date(),
-    })
-    .where(eq(trainingSessions.id, id))
-
-  return NextResponse.json({ success: true, message: 'Sessão iniciada com sucesso' })
+  } finally {
+    await pool.end()
+  }
 }
