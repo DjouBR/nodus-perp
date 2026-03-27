@@ -8,11 +8,12 @@
  * - Inicia o HeartRateWebSocketServer em /ws/heartrate
  * - Registra todos os sensores ativos do banco no AntService
  * - Expõe API REST mínima:
- *     GET  /health          — healthcheck
- *     POST /ant/start       — inicia o AntService manualmente
- *     POST /ant/stop        — para o AntService
- *     GET  /ant/status      — status do serviço + dispositivos
- *     POST /ant/reset       — reseta calorias de todos os atletas
+ *     GET  /health              — healthcheck
+ *     POST /ant/start           — inicia o AntService manualmente
+ *     POST /ant/stop            — para o AntService
+ *     GET  /ant/status          — status do serviço + dispositivos
+ *     POST /ant/reset           — reseta calorias de todos os atletas
+ *     POST /session/ended       — notifica encerramento de sessão (chamado pelo /api/sessions/[id]/finish)
  *
  * Variáveis de ambiente necessárias (mesmas do NODUS):
  *   DATABASE_URL=mysql://user:pass@host:3306/nodus_db
@@ -96,6 +97,33 @@ const server = http.createServer((req, res) => {
     return
   }
 
+  // ── POST /session/ended ─────────────────────────────────────
+  // Chamado pelo /api/sessions/[id]/finish após encerrar a sessão.
+  // Dispara handleSessionEnded no wsServer:
+  //   1. Atualiza agregados de session_athletes (avg_hr, zonas, etc.)
+  //   2. Limpa o deviceAthleteCache para que novos resolves reflitam
+  //      que a sessão foi encerrada (session_id = null)
+  if (req.method === 'POST' && url === '/session/ended') {
+    readBody(req).then(body => {
+      const { sessionId, athleteIds } = body
+
+      if (!sessionId) {
+        respondJson(res, 400, { error: 'sessionId é obrigatório' })
+        return
+      }
+
+      // Executa em background — não bloqueia a resposta
+      wsServer.handleSessionEnded(sessionId, athleteIds ?? []).catch(err => {
+        console.error('[REST /session/ended] Error:', err.message)
+      })
+
+      respondJson(res, 200, { success: true, message: `Session ${sessionId} marked as ended` })
+    }).catch(() => {
+      respondJson(res, 400, { error: 'Invalid JSON body' })
+    })
+    return
+  }
+
   // 404
   respondJson(res, 404, { error: 'Not found' })
 })
@@ -104,11 +132,11 @@ const server = http.createServer((req, res) => {
 // WEBSOCKET SERVER
 // ─────────────────────────────────────────────────────────────
 
-// Instanciado aqui para ter acesso ao resetAllCalories() nas rotas REST
+// Instanciado aqui para ter acesso ao resetAllCalories() e handleSessionEnded() nas rotas REST
 const wsServer = new HeartRateWebSocketServer(server)
 
 // ─────────────────────────────────────────────────────────────
-// HELPER JSON
+// HELPERS
 // ─────────────────────────────────────────────────────────────
 
 function respondJson(res, status, body) {
@@ -116,15 +144,22 @@ function respondJson(res, status, body) {
   res.end(JSON.stringify(body))
 }
 
+function readBody(req) {
+  return new Promise((resolve, reject) => {
+    let data = ''
+    req.on('data', chunk => { data += chunk })
+    req.on('end', () => {
+      try { resolve(JSON.parse(data || '{}')) }
+      catch { reject(new Error('Invalid JSON')) }
+    })
+    req.on('error', reject)
+  })
+}
+
 // ─────────────────────────────────────────────────────────────
 // INICIALIZAÇÃO DO ANT+
 // ─────────────────────────────────────────────────────────────
 
-/**
- * Inicia o AntService e registra todos os sensores ativos do banco.
- * - Se a antena USB não estiver conectada, loga o erro mas não derruba o processo.
- * - Cada sensor ativo vira um deviceId monitorado.
- */
 async function startAntService() {
   const antService = getAntService()
 
@@ -135,18 +170,14 @@ async function startAntService() {
 
   await antService.start()
 
-  // Registra todos os sensores ativos do banco
   try {
     const sensors = await getAllActiveSensors()
     console.log(`[ANT+] Registering ${sensors.length} active sensor(s)...`)
     sensors.forEach(({ serial }) => {
-      // serial = string ('ANT0001' ou '12345')
-      // Tenta converter para número (DeviceId ANT+ é numérico)
       const deviceId = parseInt(serial, 10)
       if (!isNaN(deviceId)) {
         antService.scanForDevice(deviceId)
       } else {
-        // Serial não numérico (ex: 'ANT0001' do seed) — mantém para compatibilidade
         console.warn(`[ANT+] Serial '${serial}' is not numeric — skipping device registration`)
         console.warn(`[ANT+] Update sensors.serial with the real ANT+ DeviceId (numeric)!`)
       }
@@ -198,11 +229,12 @@ async function main() {
   // 3. Sobe o servidor HTTP + WebSocket
   server.listen(PORT, () => {
     console.log(`\n🚀 ANT+ Server running on http://localhost:${PORT}`)
-    console.log(`   WebSocket : ws://localhost:${PORT}/ws/heartrate`)
-    console.log(`   Health    : http://localhost:${PORT}/health`)
-    console.log(`   Status    : http://localhost:${PORT}/ant/status`)
-    console.log(`   Start ANT : POST http://localhost:${PORT}/ant/start`)
-    console.log(`   Stop ANT  : POST http://localhost:${PORT}/ant/stop`)
+    console.log(`   WebSocket    : ws://localhost:${PORT}/ws/heartrate`)
+    console.log(`   Health       : http://localhost:${PORT}/health`)
+    console.log(`   Status       : http://localhost:${PORT}/ant/status`)
+    console.log(`   Start ANT    : POST http://localhost:${PORT}/ant/start`)
+    console.log(`   Stop ANT     : POST http://localhost:${PORT}/ant/stop`)
+    console.log(`   Session Ended: POST http://localhost:${PORT}/session/ended`)
   })
 }
 
