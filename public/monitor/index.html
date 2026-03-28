@@ -1,0 +1,849 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>NODUS — Monitor de Frequência Cardíaca</title>
+
+<link rel="stylesheet" href="https://www.w3schools.com/w3css/5/w3.css">
+<link rel="stylesheet" href="https://site-assets.fontawesome.com/releases/v7.1.0/css/all.css">
+<link defer="" media="all" onload="this.media='all'" rel="stylesheet" href="https://site-assets.fontawesome.com/releases/v7.1.0/css/duotone-light.css">
+
+<style>
+.w3-preto-verde { color: #000 !important; background-color: #1aff15 !important }
+.w3-verde-preto { color: #1aff15 !important; background-color: #000 !important }
+.w3-texto-vermelho { color: #a20025 }
+.w3-negrito { font-weight: bold !important; }
+.w3-negrito-extra { font-weight: 900; }
+
+body { padding: 0; margin: 0; }
+
+/* ── Animações dos ícones ── */
+.fa-heart-pulse, .fa-heartbeat, .fa-percent {
+  animation: heartbeat 1.5s ease-in-out infinite;
+}
+@keyframes heartbeat {
+  0%, 100% { transform: scale(1); }
+  10%, 30%  { transform: scale(1.1); }
+  20%, 40%  { transform: scale(1); }
+}
+.fa-fire { animation: wobble 0.5s infinite; transform-origin: bottom center; }
+@keyframes wobble {
+  0%, 100% { transform: rotate(0deg); }
+  25%       { transform: rotate(-3deg); }
+  50%       { transform: rotate(0deg); }
+  75%       { transform: rotate(3deg); }
+}
+.fa-signal-stream-slash, .fa-signal-stream { animation: pulse 2s infinite; }
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50%       { opacity: 0.5; }
+}
+
+.card-wrapper {
+  box-sizing: border-box;
+  display: inline-block;
+  vertical-align: top;
+  border-radius: 8px;
+}
+
+/* ── Gráfico circular ── */
+.flex-wrapper {
+  display: flex;
+  flex-flow: row nowrap;
+  justify-content: center;
+  align-items: center;
+  gap: 20px;
+}
+.single-chart {
+  width: 88%;
+  text-align: center;
+  padding: 10px;
+  border-radius: 10px;
+  transition: background-color 1.5s ease-in-out;
+}
+.circular-chart { display: block; margin: 10px auto; max-width: 100%; }
+.circle-bg { fill: none; stroke-width: 3.8; transition: stroke 1.5s ease-in-out; }
+.circle {
+  fill: none;
+  stroke-width: 4;
+  stroke-linecap: round;
+  stroke: #000;
+  transition: stroke-dasharray 1.5s ease-in-out, stroke 1.5s ease-in-out;
+}
+.circle-progress {
+  fill: none;
+  stroke-width: 3;
+  stroke-linecap: round;
+  transition: stroke-dasharray 1.5s ease-in-out, stroke 1.5s ease-in-out;
+}
+.percentage { fill: #000; font-family: sans-serif; font-size: 1em; text-anchor: middle; }
+.simbolo    { fill: #000; font-family: sans-serif; font-size: 0.4em; text-anchor: middle; }
+
+/* ── Sessão encerrada ── */
+#session-ended-overlay {
+  display: none;
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,0.85);
+  color: #fff;
+  font-size: 3rem;
+  font-weight: 900;
+  justify-content: center;
+  align-items: center;
+  z-index: 9999;
+  text-align: center;
+}
+</style>
+</head>
+<body>
+
+<!-- Overlay: sessão encerrada (token revogado) -->
+<div id="session-ended-overlay">
+  <div>
+    <i class="fa-solid fa-flag-checkered" style="font-size:5rem;margin-bottom:1rem;"></i><br>
+    Sessão Encerrada
+  </div>
+</div>
+
+<div id="gridContainer" style="display:flex; flex-wrap:wrap; position:relative;">
+  <div id="mainHeader" class="w3-bar" style="height:40px; width:100%; background-color:#f1f1f1; border-bottom:1px solid #ccc; padding:0">
+    <div class="w3-bar-item w3-left" style="display:flex; align-items:center;">
+      <i class="fas fa-heartbeat w3-xxlarge w3-top w3-left" style="cursor:pointer;"></i>
+      <div style="margin-left:45px;">NODUS — <span id="sessionNameHeader">MONITOR DE FREQUÊNCIA CARDÍACA</span></div>
+    </div>
+    <div id="headerConnectionArea">
+      <div id="connectedTemplate" class="w3-bar-item w3-right w3-text-green" style="display:none;">
+        <i class="fa-solid fa-signal-stream"></i> Conectado
+      </div>
+      <div id="disconnectedTemplate" class="w3-bar-item w3-right w3-text-red" style="display:none;">
+        <i class="fa-solid fa-signal-stream-slash"></i> Desconectado
+      </div>
+    </div>
+    <div class="w3-bar-item w3-right w3-text-black"><i class="fa-solid fa-expand w3-xlarge"></i></div>
+    <div class="w3-bar-item w3-right" style="display:flex;align-items:center;gap:8px;">
+      <i class="fa-regular fa-stopwatch w3-xlarge"></i>
+      <span class="w3-large w3-negrito" id="sessionTimer">00:00:00</span>
+    </div>
+  </div>
+</div>
+
+<script>
+// ══════════════════════════════════════════════════════════════
+// CONFIGURAÇÃO — lida da URL: /monitor/[token]
+// ══════════════════════════════════════════════════════════════
+
+// Extrai token do path: /monitor/[token]  ou  /monitor/index.html?token=...
+function getTokenFromUrl() {
+  const parts = window.location.pathname.split('/').filter(Boolean)
+  // /monitor/TOKEN  → parts = ['monitor', 'TOKEN']
+  if (parts.length >= 2 && parts[0] === 'monitor') return parts[1]
+  // fallback: query param ?token=
+  return new URLSearchParams(window.location.search).get('token')
+}
+
+const PAGE_TOKEN = getTokenFromUrl()
+let SESSION_ID   = null
+let SESSION_NAME = null
+let ANT_PORT     = '3001'
+let timerInterval = null
+let sessionStartTime = null
+
+// ══════════════════════════════════════════════════════════════
+// MAPA DE CORES POR ZONA
+// ══════════════════════════════════════════════════════════════
+const COLOR_MAPPING_OPACITY = {
+  'w3-grey':        'rgba(97, 97, 97, 0.7)',
+  'w3-light-green': 'rgba(139, 195, 74, 0.7)',
+  'w3-cyan':        'rgba(0, 188, 212, 0.7)',
+  'w3-yellow':      'rgba(255, 235, 59, 0.7)',
+  'w3-orange':      'rgba(255, 152, 0, 0.7)',
+  'w3-red':         'rgba(244, 67, 54, 0.7)',
+}
+const ZONE_TO_COLOR_CLASS = {
+  1: 'w3-light-green',
+  2: 'w3-cyan',
+  3: 'w3-yellow',
+  4: 'w3-orange',
+  5: 'w3-red',
+}
+
+// ══════════════════════════════════════════════════════════════
+// TEMPLATES DE CARDS (mantidos 100% do original)
+// ══════════════════════════════════════════════════════════════
+const CARD_TEMPLATES = {
+  '01_01': `
+    <header class="w3-container w3-margin-bottom w3-verde-preto w3-round-large">
+      <span class="w3-jumbo w3-negrito"><span data-name></span></span>
+      <div class="w3-right">
+        <i class="fa-duotone fa-solid fa-fire w3-jumbo" style="--fa-primary-color:#ff9500;--fa-secondary-color:#ff0000;--fa-secondary-opacity:1;"></i>
+        <span class="w3-jumbo w3-negrito"><span data-calories></span></span>
+      </div>
+    </header>
+    <div class="w3-container">
+      <div class="w3-half w3-center">
+        <div class="w3-center w3-row-padding">
+          <i class="fa-duotone fa-solid fa-heart-pulse w3-col l4" style="--fa-primary-color:#050505;--fa-secondary-color:#f01505;--fa-secondary-opacity:1;font-size:144px;padding-top:0.3em"></i>
+          <div class="w3-negrito-extra w3-col l8" style="font-size:144px"><span data-hr></span></div>
+        </div>
+        <div class="w3-center w3-row-padding">
+          <i class="fa-duotone fa-solid fa-fire w3-col l4" style="--fa-primary-color:#ff9500;--fa-secondary-color:#ff0000;--fa-secondary-opacity:1;font-size:144px;padding-top:0.3em;"></i>
+          <div class="w3-negrito-extra w3-col l8" style="font-size:144px"><span data-calories2></span></div>
+        </div>
+        <div class="w3-center w3-row-padding">
+          <i class="fa-duotone fa-thin fa-coins fa-beat-fade w3-col l4" style="--fa-primary-color:#080808;--fa-secondary-color:#b89105;--fa-secondary-opacity:1;--fa-animation-duration:2s;--fa-beat-fade-opacity:0.9;--fa-beat-fade-scale:1.075;font-size:144px;padding-top:0.3em;"></i>
+          <div class="w3-negrito-extra w3-col l8" style="font-size:144px"><span data-points></span></div>
+        </div>
+      </div>
+      <div class="w3-half w3-center">
+        <div class="flex-wrapper">
+          <div class="single-chart" id="chart-container-green">
+            <svg viewBox="0 0 36 36" class="circular-chart green" id="chart-green">
+              <path class="circle-bg" d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831"/>
+              <path class="circle" stroke-dasharray="0,100" d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831"/>
+              <path class="circle-progress" stroke-dasharray="0,100" d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831"/>
+              <text x="18" y="21.35" class="percentage w3-negrito" id="text-green" data-percent>0</text>
+              <text x="18" y="27.35" class="simbolo w3-negrito">%</text>
+            </svg>
+          </div>
+        </div>
+      </div>
+    </div>`,
+  '02_02': `
+    <header class="w3-container w3-margin-bottom w3-verde-preto w3-round-large">
+      <span class="w3-jumbo w3-negrito"><span data-name></span></span>
+      <div class="w3-right">
+        <i class="fa-duotone fa-solid fa-fire w3-jumbo" style="--fa-primary-color:#ff9500;--fa-secondary-color:#ff0000;--fa-secondary-opacity:1;"></i>
+        <span class="w3-jumbo w3-negrito"><span data-calories></span></span>
+      </div>
+    </header>
+    <div class="w3-container">
+      <div class="w3-half w3-center" style="margin-top:64px;">
+        <div class="w3-center w3-row-padding">
+          <i class="fa-duotone fa-thin fa-heart-pulse w3-col l4" style="--fa-primary-color:#050505;--fa-secondary-color:#f01505;--fa-secondary-opacity:1;font-size:96px;padding-top:0.3em"></i>
+          <div class="w3-negrito-extra w3-col l8" style="font-size:96px"><span data-hr></span></div>
+        </div>
+        <div class="w3-center w3-row-padding">
+          <i class="fa-duotone fa-solid fa-fire w3-col l4" style="--fa-primary-color:#ff9500;--fa-secondary-color:#ff0000;--fa-secondary-opacity:1;font-size:96px;padding-top:0.3em;"></i>
+          <div class="w3-negrito-extra w3-col l8" style="font-size:96px"><span data-calories2></span></div>
+        </div>
+        <div class="w3-center w3-row-padding">
+          <i class="fa-duotone fa-thin fa-coins fa-beat-fade w3-col l4" style="--fa-primary-color:#080808;--fa-secondary-color:#b89105;--fa-secondary-opacity:1;--fa-animation-duration:2s;font-size:96px;padding-top:0.3em;"></i>
+          <div class="w3-negrito-extra w3-col l8" style="font-size:96px"><span data-points></span></div>
+        </div>
+      </div>
+      <div class="w3-half w3-center" style="margin-top:64px;">
+        <div class="flex-wrapper">
+          <div class="single-chart" id="chart-container-green">
+            <svg viewBox="0 0 36 36" class="circular-chart" id="chart-green">
+              <path class="circle-bg" d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831"/>
+              <path class="circle" stroke-dasharray="0,100" d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831"/>
+              <path class="circle-progress" stroke-dasharray="0,100" d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831"/>
+              <text x="18" y="21.35" class="percentage w3-negrito" id="text-green" data-percent>0</text>
+              <text x="18" y="27.35" class="simbolo w3-negrito">%</text>
+            </svg>
+          </div>
+        </div>
+      </div>
+    </div>`,
+  '03_04': `
+    <header class="w3-container w3-margin-bottom w3-verde-preto w3-round-large">
+      <span class="w3-jumbo w3-negrito"><span data-name></span></span>
+      <div class="w3-right">
+        <i class="fa-duotone fa-solid fa-fire w3-jumbo" style="--fa-primary-color:#ff9500;--fa-secondary-color:#ff0000;--fa-secondary-opacity:1;"></i>
+        <span class="w3-jumbo w3-negrito"><span data-calories></span></span>
+      </div>
+    </header>
+    <div class="w3-container">
+      <div class="w3-half w3-center">
+        <div class="w3-center w3-row-padding">
+          <i class="fa-duotone fa-thin fa-heart-pulse w3-col l4 w3-jumbo" style="--fa-primary-color:#050505;--fa-secondary-color:#f01505;--fa-secondary-opacity:1;padding-top:0.3em"></i>
+          <div class="w3-negrito-extra w3-col l8 w3-jumbo"><span data-hr></span></div>
+        </div>
+        <div class="w3-center w3-row-padding">
+          <i class="fa-duotone fa-solid fa-fire w3-col l4 w3-jumbo" style="--fa-primary-color:#ff9500;--fa-secondary-color:#ff0000;--fa-secondary-opacity:1;padding-top:0.3em;"></i>
+          <div class="w3-negrito-extra w3-col l8 w3-jumbo"><span data-calories2></span></div>
+        </div>
+        <div class="w3-center w3-row-padding">
+          <i class="fa-duotone fa-thin fa-coins fa-beat-fade w3-col l4 w3-jumbo" style="--fa-primary-color:#080808;--fa-secondary-color:#b89105;--fa-secondary-opacity:1;--fa-animation-duration:2s;padding-top:0.3em;"></i>
+          <div class="w3-negrito-extra w3-col l8 w3-jumbo"><span data-points></span></div>
+        </div>
+      </div>
+      <div class="w3-half w3-center">
+        <div class="flex-wrapper">
+          <div class="single-chart" id="chart-container-green" style="width:73%">
+            <svg viewBox="0 0 36 36" class="circular-chart" id="chart-green">
+              <path class="circle-bg" d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831"/>
+              <path class="circle" stroke-dasharray="0,100" d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831"/>
+              <path class="circle-progress" stroke-dasharray="0,100" d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831"/>
+              <text x="18" y="21.35" class="percentage w3-negrito" id="text-green" data-percent>0</text>
+              <text x="18" y="27.35" class="simbolo w3-negrito">%</text>
+            </svg>
+          </div>
+        </div>
+      </div>
+    </div>`,
+  '05_06': `
+    <header class="w3-container w3-margin-bottom w3-verde-preto w3-round-large">
+      <span class="w3-xxlarge w3-negrito"><span data-name></span></span>
+      <div class="w3-right">
+        <i class="fa-duotone fa-solid fa-fire w3-xxxlarge" style="--fa-primary-color:#ff9500;--fa-secondary-color:#ff0000;--fa-secondary-opacity:1;"></i>
+        <span class="w3-xxlarge w3-negrito"><span data-calories></span></span>
+      </div>
+    </header>
+    <div class="w3-container">
+      <div class="w3-half w3-center">
+        <div class="w3-center w3-row-padding">
+          <i class="fa-duotone fa-thin fa-heart-pulse w3-col l4 w3-jumbo" style="--fa-primary-color:#050505;--fa-secondary-color:#f01505;--fa-secondary-opacity:1;padding-top:0.3em"></i>
+          <div class="w3-negrito-extra w3-col l8 w3-jumbo"><span data-hr></span></div>
+        </div>
+        <div class="w3-center w3-row-padding">
+          <i class="fa-duotone fa-solid fa-fire w3-col l4 w3-jumbo" style="--fa-primary-color:#ff9500;--fa-secondary-color:#ff0000;--fa-secondary-opacity:1;padding-top:0.3em;"></i>
+          <div class="w3-negrito-extra w3-col l8 w3-jumbo"><span data-calories2></span></div>
+        </div>
+        <div class="w3-center w3-row-padding">
+          <i class="fa-duotone fa-thin fa-coins fa-beat-fade w3-col l4 w3-jumbo" style="--fa-primary-color:#080808;--fa-secondary-color:#b89105;--fa-secondary-opacity:1;--fa-animation-duration:2s;padding-top:0.3em;"></i>
+          <div class="w3-negrito-extra w3-col l8 w3-jumbo"><span data-points></span></div>
+        </div>
+      </div>
+      <div class="w3-half w3-center">
+        <div class="flex-wrapper">
+          <div class="single-chart" id="chart-container-green" style="width:100%">
+            <svg viewBox="0 0 36 36" class="circular-chart" id="chart-green">
+              <path class="circle-bg" d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831"/>
+              <path class="circle" stroke-dasharray="0,100" d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831"/>
+              <path class="circle-progress" stroke-dasharray="0,100" d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831"/>
+              <text x="18" y="21.35" class="percentage w3-negrito" id="text-green" data-percent>0</text>
+              <text x="18" y="27.35" class="simbolo w3-negrito">%</text>
+            </svg>
+          </div>
+        </div>
+      </div>
+    </div>`,
+  '07_09': `
+    <header class="w3-container w3-margin-bottom w3-verde-preto w3-round-large">
+      <span class="w3-xxlarge w3-negrito"><span data-name></span></span>
+      <div class="w3-right">
+        <i class="fa-duotone fa-solid fa-fire w3-xxxlarge" style="--fa-primary-color:#ff9500;--fa-secondary-color:#ff0000;--fa-secondary-opacity:1;"></i>
+        <span class="w3-xxlarge w3-negrito"><span data-calories></span></span>
+      </div>
+    </header>
+    <div class="w3-container">
+      <div class="w3-half w3-center">
+        <div class="w3-center w3-row-padding">
+          <i class="fa-duotone fa-thin fa-heart-pulse w3-col l4 w3-xxlarge" style="--fa-primary-color:#050505;--fa-secondary-color:#f01505;--fa-secondary-opacity:1;padding-top:0.3em"></i>
+          <div class="w3-negrito-extra w3-col l8 w3-xxlarge"><span data-hr></span></div>
+        </div>
+        <div class="w3-center w3-row-padding">
+          <i class="fa-duotone fa-solid fa-fire w3-col l4 w3-xxlarge" style="--fa-primary-color:#ff9500;--fa-secondary-color:#ff0000;--fa-secondary-opacity:1;padding-top:0.3em;"></i>
+          <div class="w3-negrito-extra w3-col l8 w3-xxlarge"><span data-calories2></span></div>
+        </div>
+        <div class="w3-center w3-row-padding">
+          <i class="fa-duotone fa-thin fa-coins fa-beat-fade w3-col l4 w3-xxlarge" style="--fa-primary-color:#080808;--fa-secondary-color:#b89105;--fa-secondary-opacity:1;--fa-animation-duration:2s;padding-top:0.3em;"></i>
+          <div class="w3-negrito-extra w3-col l8 w3-xxlarge"><span data-points></span></div>
+        </div>
+      </div>
+      <div class="w3-half w3-center">
+        <div class="flex-wrapper">
+          <div class="single-chart" id="chart-container-green" style="width:72%">
+            <svg viewBox="0 0 36 36" class="circular-chart" id="chart-green">
+              <path class="circle-bg" d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831"/>
+              <path class="circle" stroke-dasharray="0,100" d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831"/>
+              <path class="circle-progress" stroke-dasharray="0,100" d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831"/>
+              <text x="18" y="21.35" class="percentage w3-negrito" id="text-green" data-percent>0</text>
+              <text x="18" y="27.35" class="simbolo w3-negrito">%</text>
+            </svg>
+          </div>
+        </div>
+      </div>
+    </div>`,
+  '10_12': `
+    <header class="w3-container w3-margin-bottom w3-verde-preto w3-round-large">
+      <span class="w3-xlarge w3-negrito"><span data-name></span></span>
+      <div class="w3-right">
+        <i class="fa-duotone fa-solid fa-fire w3-xxlarge" style="--fa-primary-color:#ff9500;--fa-secondary-color:#ff0000;--fa-secondary-opacity:1;"></i>
+        <span class="w3-xlarge w3-negrito"><span data-calories></span></span>
+      </div>
+    </header>
+    <div class="w3-container">
+      <div class="w3-half w3-center">
+        <div class="w3-center w3-row-padding">
+          <i class="fa-duotone fa-thin fa-heart-pulse w3-col l4 w3-xxlarge" style="--fa-primary-color:#050505;--fa-secondary-color:#f01505;--fa-secondary-opacity:1;padding-top:0.3em"></i>
+          <div class="w3-negrito-extra w3-col l8 w3-xxlarge"><span data-hr></span></div>
+        </div>
+        <div class="w3-center w3-row-padding">
+          <i class="fa-duotone fa-solid fa-fire w3-col l4 w3-xxlarge" style="--fa-primary-color:#ff9500;--fa-secondary-color:#ff0000;--fa-secondary-opacity:1;padding-top:0.3em;"></i>
+          <div class="w3-negrito-extra w3-col l8 w3-xxlarge"><span data-calories2></span></div>
+        </div>
+        <div class="w3-center w3-row-padding">
+          <i class="fa-duotone fa-thin fa-coins fa-beat-fade w3-col l4 w3-xxlarge" style="--fa-primary-color:#080808;--fa-secondary-color:#b89105;--fa-secondary-opacity:1;--fa-animation-duration:2s;padding-top:0.3em;"></i>
+          <div class="w3-negrito-extra w3-col l8 w3-xxlarge"><span data-points></span></div>
+        </div>
+      </div>
+      <div class="w3-half w3-center">
+        <div class="flex-wrapper">
+          <div class="single-chart" id="chart-container-green" style="width:100%">
+            <svg viewBox="0 0 36 36" class="circular-chart" id="chart-green">
+              <path class="circle-bg" d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831"/>
+              <path class="circle" stroke-dasharray="0,100" d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831"/>
+              <path class="circle-progress" stroke-dasharray="0,100" d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831"/>
+              <text x="18" y="21.35" class="percentage w3-negrito" id="text-green" data-percent>0</text>
+              <text x="18" y="27.35" class="simbolo w3-negrito">%</text>
+            </svg>
+          </div>
+        </div>
+      </div>
+    </div>`,
+  '13_16': `
+    <header class="w3-container w3-verde-preto w3-round-large">
+      <span class="w3-xlarge w3-negrito"><span data-name></span></span>
+      <div class="w3-right">
+        <i class="fa-duotone fa-solid fa-fire w3-xxlarge" style="--fa-primary-color:#ff9500;--fa-secondary-color:#ff0000;--fa-secondary-opacity:1;"></i>
+        <span class="w3-xlarge w3-negrito"><span data-calories></span></span>
+      </div>
+    </header>
+    <div class="w3-container">
+      <div class="w3-half w3-center w3-margin-top">
+        <div class="w3-center w3-row-padding">
+          <i class="fa-duotone fa-thin fa-heart-pulse w3-col l4 w3-xlarge" style="--fa-primary-color:#050505;--fa-secondary-color:#f01505;--fa-secondary-opacity:1;padding-top:0.3em"></i>
+          <div class="w3-negrito-extra w3-col l8 w3-xlarge"><span data-hr></span></div>
+        </div>
+        <div class="w3-center w3-row-padding">
+          <i class="fa-duotone fa-solid fa-fire w3-col l4 w3-xlarge" style="--fa-primary-color:#ff9500;--fa-secondary-color:#ff0000;--fa-secondary-opacity:1;padding-top:0.3em;"></i>
+          <div class="w3-negrito-extra w3-col l8 w3-xlarge"><span data-calories2></span></div>
+        </div>
+        <div class="w3-center w3-row-padding">
+          <i class="fa-duotone fa-thin fa-coins fa-beat-fade w3-col l4 w3-xlarge" style="--fa-primary-color:#080808;--fa-secondary-color:#b89105;--fa-secondary-opacity:1;--fa-animation-duration:2s;padding-top:0.3em;"></i>
+          <div class="w3-negrito-extra w3-col l8 w3-xlarge"><span data-points></span></div>
+        </div>
+      </div>
+      <div class="w3-half w3-center">
+        <div class="flex-wrapper">
+          <div class="single-chart" id="chart-container-green" style="width:78%">
+            <svg viewBox="0 0 36 36" class="circular-chart" id="chart-green">
+              <path class="circle-bg" d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831"/>
+              <path class="circle" stroke-dasharray="0,100" d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831"/>
+              <path class="circle-progress" stroke-dasharray="0,100" d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831"/>
+              <text x="18" y="21.35" class="percentage w3-negrito" id="text-green" data-percent>0</text>
+              <text x="18" y="27.35" class="simbolo w3-negrito">%</text>
+            </svg>
+          </div>
+        </div>
+      </div>
+    </div>`,
+  '17_20': `
+    <header class="w3-container w3-verde-preto w3-round-large">
+      <span class="w3-large w3-negrito"><span data-name></span></span>
+      <div class="w3-right">
+        <i class="fa-duotone fa-solid fa-fire w3-xlarge" style="--fa-primary-color:#ff9500;--fa-secondary-color:#ff0000;--fa-secondary-opacity:1;"></i>
+        <span class="w3-large w3-negrito"><span data-calories></span></span>
+      </div>
+    </header>
+    <div class="w3-container">
+      <div class="w3-half w3-center w3-margin-top">
+        <div class="w3-center w3-row-padding">
+          <i class="fa-duotone fa-thin fa-heart-pulse w3-col l4 w3-xlarge" style="--fa-primary-color:#050505;--fa-secondary-color:#f01505;--fa-secondary-opacity:1;padding-top:0.3em"></i>
+          <div class="w3-negrito-extra w3-col l8 w3-xlarge"><span data-hr></span></div>
+        </div>
+        <div class="w3-center w3-row-padding">
+          <i class="fa-duotone fa-solid fa-fire w3-col l4 w3-xlarge" style="--fa-primary-color:#ff9500;--fa-secondary-color:#ff0000;--fa-secondary-opacity:1;padding-top:0.3em;"></i>
+          <div class="w3-negrito-extra w3-col l8 w3-xlarge"><span data-calories2></span></div>
+        </div>
+        <div class="w3-center w3-row-padding">
+          <i class="fa-duotone fa-thin fa-coins fa-beat-fade w3-col l4 w3-xlarge" style="--fa-primary-color:#080808;--fa-secondary-color:#b89105;--fa-secondary-opacity:1;--fa-animation-duration:2s;padding-top:0.3em;"></i>
+          <div class="w3-negrito-extra w3-col l8 w3-xlarge"><span data-points></span></div>
+        </div>
+      </div>
+      <div class="w3-half w3-center">
+        <div class="flex-wrapper">
+          <div class="single-chart" id="chart-container-green" style="width:100%">
+            <svg viewBox="0 0 36 36" class="circular-chart" id="chart-green">
+              <path class="circle-bg" d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831"/>
+              <path class="circle" stroke-dasharray="0,100" d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831"/>
+              <path class="circle-progress" stroke-dasharray="0,100" d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831"/>
+              <text x="18" y="21.35" class="percentage w3-negrito" id="text-green" data-percent>0</text>
+              <text x="18" y="27.35" class="simbolo w3-negrito">%</text>
+            </svg>
+          </div>
+        </div>
+      </div>
+    </div>`,
+  '21_42': `
+    <header class="w3-container w3-verde-preto w3-round">
+      <span class="w3-large w3-negrito"><span data-name></span></span>
+      <div class="w3-right">
+        <i class="fa-duotone fa-solid fa-fire w3-xlarge" style="--fa-primary-color:#ff9500;--fa-secondary-color:#ff0000;--fa-secondary-opacity:1;"></i>
+        <span class="w3-large w3-negrito"><span data-calories></span></span>
+      </div>
+    </header>
+    <div class="w3-container">
+      <div class="w3-half w3-center">
+        <div class="w3-center w3-row-padding">
+          <i class="fa-duotone fa-thin fa-heart-pulse w3-col l4 w3-xlarge" style="--fa-primary-color:#050505;--fa-secondary-color:#f01505;--fa-secondary-opacity:1;padding-top:0.3em"></i>
+          <div class="w3-negrito-extra w3-col l8 w3-xlarge"><span data-hr></span></div>
+        </div>
+        <div class="w3-center w3-row-padding">
+          <i class="fa-duotone fa-solid fa-fire w3-col l4 w3-xlarge" style="--fa-primary-color:#ff9500;--fa-secondary-color:#ff0000;--fa-secondary-opacity:1;padding-top:0.3em;"></i>
+          <div class="w3-negrito-extra w3-col l8 w3-xlarge"><span data-calories2></span></div>
+        </div>
+        <div class="w3-center w3-row-padding">
+          <i class="fa-duotone fa-thin fa-coins fa-beat-fade w3-col l4 w3-xlarge" style="--fa-primary-color:#080808;--fa-secondary-color:#b89105;--fa-secondary-opacity:1;--fa-animation-duration:2s;padding-top:0.3em;"></i>
+          <div class="w3-negrito-extra w3-col l8 w3-xlarge"><span data-points></span></div>
+        </div>
+      </div>
+      <div class="w3-half w3-center">
+        <div class="flex-wrapper">
+          <div class="single-chart" id="chart-container-green" style="width:80%">
+            <svg viewBox="0 0 36 36" class="circular-chart" id="chart-green">
+              <path class="circle-bg" d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831"/>
+              <path class="circle" stroke-dasharray="0,100" d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831"/>
+              <path class="circle-progress" stroke-dasharray="0,100" d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831"/>
+              <text x="18" y="21.35" class="percentage w3-negrito" id="text-green" data-percent>0</text>
+              <text x="18" y="27.35" class="simbolo w3-negrito">%</text>
+            </svg>
+          </div>
+        </div>
+      </div>
+    </div>`,
+}
+
+const TEMPLATE_RULES = [
+  { min: 1,  max: 1,  key: '01_01' },
+  { min: 2,  max: 2,  key: '02_02' },
+  { min: 3,  max: 4,  key: '03_04' },
+  { min: 5,  max: 6,  key: '05_06' },
+  { min: 7,  max: 9,  key: '07_09' },
+  { min: 10, max: 12, key: '10_12' },
+  { min: 13, max: 16, key: '13_16' },
+  { min: 17, max: 20, key: '17_20' },
+  { min: 21, max: 42, key: '21_42' },
+]
+
+function getGridConfig(n) {
+  if (n === 1)  return { colunas: 1, linhas: 1, gap: 34, templateKey: '01_01' }
+  if (n === 2)  return { colunas: 2, linhas: 1, gap: 32, templateKey: '02_02' }
+  if (n <= 4)   return { colunas: 2, linhas: 2, gap: 30, templateKey: '03_04' }
+  if (n <= 6)   return { colunas: 3, linhas: 2, gap: 28, templateKey: '05_06' }
+  if (n <= 9)   return { colunas: 3, linhas: 3, gap: 26, templateKey: '07_09' }
+  if (n <= 12)  return { colunas: 4, linhas: 3, gap: 24, templateKey: '10_12' }
+  if (n <= 16)  return { colunas: 4, linhas: 4, gap: 22, templateKey: '13_16' }
+  if (n <= 20)  return { colunas: 5, linhas: 4, gap: 20, templateKey: '17_20' }
+  if (n <= 25)  return { colunas: 5, linhas: 5, gap: 18, templateKey: '21_42' }
+  if (n <= 30)  return { colunas: 6, linhas: 5, gap: 16, templateKey: '21_42' }
+  if (n <= 36)  return { colunas: 6, linhas: 6, gap: 14, templateKey: '21_42' }
+  return         { colunas: 7, linhas: 6, gap: 12, templateKey: '21_42' }
+}
+
+function calcularTamanhoDiv(n) {
+  const config = getGridConfig(n)
+  const larguraTotalDisponivel = document.documentElement.clientWidth
+  const alturaTotalDisponivel  = window.innerHeight
+  const { colunas, linhas, gap } = config
+  const alturaCabecalho = document.getElementById('mainHeader').offsetHeight || 40
+
+  const larguraDiv = (larguraTotalDisponivel - (colunas + 1) * gap) / colunas
+  const alturaDiv  = (alturaTotalDisponivel - ((linhas + 1) * gap) - alturaCabecalho) / linhas
+
+  return {
+    largura:     Math.max(120, larguraDiv),
+    altura:      Math.max(100, alturaDiv),
+    margin:      gap,
+    templateKey: config.templateKey,
+  }
+}
+
+// ══════════════════════════════════════════════════════════════
+// STATE
+// ══════════════════════════════════════════════════════════════
+const gridContainer = document.getElementById('gridContainer')
+const studentsData  = new Map()
+
+// ══════════════════════════════════════════════════════════════
+// HEADER — conexão
+// ══════════════════════════════════════════════════════════════
+function showConnected() {
+  document.getElementById('disconnectedTemplate').style.display = 'none'
+  document.getElementById('connectedTemplate').style.display = ''
+}
+function showDisconnected() {
+  document.getElementById('connectedTemplate').style.display = 'none'
+  document.getElementById('disconnectedTemplate').style.display = ''
+}
+
+// ══════════════════════════════════════════════════════════════
+// CARDS
+// ══════════════════════════════════════════════════════════════
+function createCardFromTemplate(templateKey, data, size, studentId, totalCards) {
+  const wrapper = document.createElement('div')
+  wrapper.className = 'card-wrapper w3-card'
+  wrapper.style.width   = Math.floor(size.largura) + 'px'
+  wrapper.style.height  = Math.floor(size.altura) + 'px'
+  wrapper.style.marginLeft = size.margin + 'px'
+  wrapper.style.marginTop  = size.margin + 'px'
+  wrapper.id = `card-${studentId}`
+  wrapper.dataset.hasChart = '1'
+
+  if ([3,4,7,8,9].includes(totalCards)) wrapper.style.lineHeight = '1.2'
+
+  const zone      = Number(data.zone) || 1
+  const colorClass = ZONE_TO_COLOR_CLASS[zone] || 'w3-grey'
+  wrapper.style.backgroundColor = COLOR_MAPPING_OPACITY[colorClass]
+
+  const temp = document.createElement('div')
+  temp.innerHTML = CARD_TEMPLATES[templateKey].trim()
+  Array.from(temp.childNodes).forEach(n => wrapper.appendChild(n.cloneNode(true)))
+
+  // IDs únicos por atleta
+  const svg = wrapper.querySelector('#chart-green')
+  if (svg) svg.id = `chart-${studentId}`
+  const txt = wrapper.querySelector('#text-green')
+  if (txt) txt.id = `percent-${studentId}`
+  const cnt = wrapper.querySelector('#chart-container-green')
+  if (cnt) cnt.id = `container-${studentId}`
+
+  // Preenche dados iniciais
+  const fill = (sel, val) => { const el = wrapper.querySelector(sel); if (el) el.textContent = val ?? '' }
+  fill('[data-name]',     data.studentName || `ID ${studentId}`)
+  fill('[data-calories]', Math.round(data.calories ?? 0))
+  fill('[data-calories2]',Math.round(data.calories ?? 0))
+  fill('[data-hr]',       data.heartRate ?? '--')
+  fill('[data-points]',   Math.round(data.points ?? 0))
+  const pct = data.percent ?? Math.round((Number(data.heartRate || 0) / (data.maxHeartRate || 200)) * 100)
+  fill('[data-percent]',  pct)
+
+  return wrapper
+}
+
+function renderAllCards() {
+  Array.from(gridContainer.children).forEach(c => { if (c.id !== 'mainHeader') c.remove() })
+  const n = studentsData.size
+  if (n === 0) return
+  const size = calcularTamanhoDiv(n)
+  for (const [studentId, data] of studentsData.entries()) {
+    gridContainer.appendChild(createCardFromTemplate(size.templateKey, data, size, studentId, n))
+  }
+}
+
+function applyZoneColor(card, zone) {
+  const colorClass = ZONE_TO_COLOR_CLASS[zone] || 'w3-grey'
+  card.style.backgroundColor = COLOR_MAPPING_OPACITY[colorClass]
+}
+
+function updateChart(card, percent, zone) {
+  if (card.dataset.hasChart !== '1') return
+  const studentId     = card.id.replace('card-', '')
+  const svgChart      = card.querySelector(`#chart-${studentId}`)
+  const text          = card.querySelector(`#percent-${studentId}`)
+  if (!svgChart || !text) return
+  const circleProgress = svgChart.querySelector('.circle-progress')
+  const circleBorder   = svgChart.querySelector('.circle')
+  if (!circleProgress) return
+  const colorClass = ZONE_TO_COLOR_CLASS[zone] || 'w3-grey'
+  const rgba       = COLOR_MAPPING_OPACITY[colorClass] || COLOR_MAPPING_OPACITY['w3-grey']
+  circleProgress.style.strokeDasharray = `${percent}, 100`
+  if (circleBorder) circleBorder.style.strokeDasharray = `${percent}, 100`
+  circleProgress.style.stroke = rgba.replace('0.7', '1.0')
+  text.textContent = percent
+}
+
+function updateCard(studentId, data) {
+  const card = document.getElementById(`card-${studentId}`)
+  if (!card) return
+  const fill = (sel, val) => { const el = card.querySelector(sel); if (el) el.textContent = val }
+  fill('[data-hr]',       data.heartRate ?? '--')
+  fill('[data-calories]', Math.round(data.calories ?? 0))
+  fill('[data-calories2]',Math.round(data.calories ?? 0))
+  fill('[data-points]',   Math.round(data.points   ?? 0))
+  const percent = Number(data.percent ?? 0)
+  fill('[data-percent]',  percent)
+  const zone = Number(data.zone ?? 1)
+  applyZoneColor(card, zone)
+  updateChart(card, percent, zone)
+}
+
+// ══════════════════════════════════════════════════════════════
+// CRONÔMETRO
+// ══════════════════════════════════════════════════════════════
+function startTimer(fromMs) {
+  sessionStartTime = Date.now() - (fromMs || 0)
+  if (timerInterval) clearInterval(timerInterval)
+  timerInterval = setInterval(() => {
+    const elapsed  = Math.floor((Date.now() - sessionStartTime) / 1000)
+    const h = Math.floor(elapsed / 3600)
+    const m = Math.floor((elapsed % 3600) / 60)
+    const s = elapsed % 60
+    document.getElementById('sessionTimer').textContent =
+      `${String(h).padStart(2,'0')}:${String(m).padStart(2,'0')}:${String(s).padStart(2,'0')}`
+  }, 1000)
+}
+
+// ══════════════════════════════════════════════════════════════
+// SESSÃO ENCERRADA
+// ══════════════════════════════════════════════════════════════
+function showSessionEnded() {
+  if (timerInterval) clearInterval(timerInterval)
+  const overlay = document.getElementById('session-ended-overlay')
+  overlay.style.display = 'flex'
+}
+
+// ══════════════════════════════════════════════════════════════
+// TOKEN POLLING — verifica se token ainda é válido a cada 30s
+// ══════════════════════════════════════════════════════════════
+function startTokenPolling() {
+  if (!PAGE_TOKEN) return
+  setInterval(async () => {
+    try {
+      const r = await fetch(`/api/monitor/${PAGE_TOKEN}`)
+      if (!r.ok) showSessionEnded()
+    } catch { /* sem rede — aguarda próximo ciclo */ }
+  }, 30_000)
+}
+
+// ══════════════════════════════════════════════════════════════
+// WEBSOCKET
+// ══════════════════════════════════════════════════════════════
+function buildWsUrl() {
+  const host = window.location.hostname
+  return `ws://${host}:${ANT_PORT}/ws/heartrate`
+}
+
+let ws = null
+let reconnectTimeout = null
+
+function connect() {
+  if (ws && ws.readyState === WebSocket.OPEN) return
+  ws = new WebSocket(buildWsUrl())
+
+  ws.onopen = () => {
+    console.log('[WS] Conectado')
+    showConnected()
+    // Envia sessionId para filtrar apenas atletas desta sessão
+    try {
+      ws.send(JSON.stringify({ type: 'request_data', sessionId: SESSION_ID }))
+    } catch(e) {}
+  }
+
+  ws.onmessage = (event) => {
+    try {
+      const msg = JSON.parse(event.data)
+
+      if (msg.type === 'initial_data') {
+        studentsData.clear()
+        ;(msg.data || []).forEach(d => {
+          if (d?.studentId !== undefined) studentsData.set(d.studentId, d)
+        })
+        renderAllCards()
+        // Inicia cronômetro com elapsed se o servidor enviar
+        if (msg.elapsedMs) startTimer(msg.elapsedMs)
+        else startTimer(0)
+        return
+      }
+
+      if (msg.type === 'heartrate') {
+        const d = msg.data
+        if (!d || d.studentId === undefined) return
+        // Calcula percent e zona se ausentes
+        if (d.percent === undefined || d.percent === null) {
+          d.percent = Math.round((Number(d.heartRate || 0) / (d.maxHeartRate || 200)) * 100)
+        }
+        const p = Number(d.percent || 0)
+        let zone = 1
+        if (p >= 90) zone = 5
+        else if (p >= 80) zone = 4
+        else if (p >= 70) zone = 3
+        else if (p >= 60) zone = 2
+        d.zone = zone
+
+        studentsData.set(d.studentId, d)
+        if (!document.getElementById(`card-${d.studentId}`)) renderAllCards()
+        else updateCard(d.studentId, d)
+        return
+      }
+
+      if (msg.type === 'session_ended') {
+        showSessionEnded()
+        return
+      }
+
+      if (msg.type === 'reset_all') {
+        studentsData.clear()
+        ;(msg.data || []).forEach(d => {
+          if (d?.studentId !== undefined) studentsData.set(d.studentId, d)
+        })
+        renderAllCards()
+        return
+      }
+
+      if (msg.type === 'remove') {
+        if (msg.studentId !== undefined && studentsData.has(msg.studentId)) {
+          studentsData.delete(msg.studentId)
+          renderAllCards()
+        }
+      }
+    } catch(err) {
+      console.error('[WS] Erro ao processar mensagem', err)
+    }
+  }
+
+  ws.onclose = () => {
+    console.log('[WS] Desconectado')
+    showDisconnected()
+    if (reconnectTimeout) clearTimeout(reconnectTimeout)
+    reconnectTimeout = setTimeout(connect, 3000)
+  }
+
+  ws.onerror = (err) => {
+    console.error('[WS] Erro', err)
+    showDisconnected()
+  }
+}
+
+// Keepalive ping a cada 30s
+setInterval(() => {
+  if (ws && ws.readyState === WebSocket.OPEN) {
+    try { ws.send(JSON.stringify({ type: 'ping' })) } catch(e) {}
+  }
+}, 30_000)
+
+window.addEventListener('resize', () => {
+  if (studentsData.size > 0) renderAllCards()
+})
+
+// ══════════════════════════════════════════════════════════════
+// BOOT — valida token → obtém sessionId → conecta WS
+// ══════════════════════════════════════════════════════════════
+async function boot() {
+  if (!PAGE_TOKEN) {
+    document.getElementById('sessionNameHeader').textContent = 'TOKEN INVÁLIDO'
+    showDisconnected()
+    return
+  }
+
+  try {
+    const res  = await fetch(`/api/monitor/${PAGE_TOKEN}`)
+    const json = await res.json()
+
+    if (!res.ok || !json.ok) {
+      showSessionEnded()
+      return
+    }
+
+    SESSION_ID   = json.sessionId
+    SESSION_NAME = json.sessionName
+    ANT_PORT     = json.antServerPort || '3001'
+
+    document.getElementById('sessionNameHeader').textContent = SESSION_NAME
+    document.title = `NODUS — ${SESSION_NAME}`
+
+    connect()
+    startTokenPolling()
+  } catch(err) {
+    console.error('[Boot] Erro ao validar token:', err)
+    showDisconnected()
+  }
+}
+
+boot()
+</script>
+</body>
+</html>

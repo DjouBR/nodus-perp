@@ -2,9 +2,12 @@
 import { withAuth } from 'next-auth/middleware'
 import { NextResponse } from 'next/server'
 
+// Rotas completamente públicas (sem autenticação)
 const PUBLIC_ROUTES = [
   '/login', '/register', '/forgot-password',
-  '/reset-password', '/verify-email', '/two-steps'
+  '/reset-password', '/verify-email', '/two-steps',
+  // Tela 2 — Monitor público para TV/SmartTV (acesso via token de sessão)
+  '/monitor',
 ]
 
 const ALL_ROLES = [
@@ -82,6 +85,7 @@ export default withAuth(
     const token = req.nextauth?.token
     const role  = token?.role
 
+    // Rotas públicas — sem autenticação
     if (PUBLIC_ROUTES.some(r => pathname.startsWith(r))) return NextResponse.next()
     if (!token) return NextResponse.redirect(new URL('/login', req.url))
 
