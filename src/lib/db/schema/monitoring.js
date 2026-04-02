@@ -1,42 +1,47 @@
-import { mysqlTable, varchar, tinyint, timestamp, int, mysqlEnum } from 'drizzle-orm/mysql-core'
+import {
+  mysqlTable, varchar, int, float, decimal,
+  datetime, timestamp, mysqlEnum, index
+} from 'drizzle-orm/mysql-core'
 
 // ───────────────────────────────────────────────────────────────────
-// SENSORS — cintos ANT+ e sensores BLE
+// ANT_SENSORS
+// Registro dos sensores ANT+ conhecidos pelo sistema.
+// device_id: número do dispositivo ANT+ (Device Number, 16-bit)
+// ───────────────────────────────────────────────────────────────────
+export const ant_sensors = mysqlTable('ant_sensors', {
+  id:          varchar('id', { length: 36 }).primaryKey(),
+  tenant_id:   varchar('tenant_id', { length: 36 }),
+  device_id:   int('device_id').notNull(),
+  label:       varchar('label', { length: 60 }),
+  type:        mysqlEnum('type', ['hrm', 'power', 'speed', 'cadence']).default('hrm'),
+  is_active:   int('is_active').default(1),
+  last_seen:   datetime('last_seen'),
+  created_at:  timestamp('created_at').defaultNow(),
+})
+
+// ───────────────────────────────────────────────────────────────────
+// SESSION_HR_SERIES (movida de sessions.js para cá)
+// Série temporal de FC por atleta por sessão.
+// Gravada pelo ant-server a cada ~5 segundos enquanto a aula está ativa.
 //
-// athlete_id é opcional: representa o ÚLTIMO atleta que usou o sensor
-// (histório/referência). O vínculo real por sessão fica em
-// session_athletes.sensor_id (atribuído no check-in).
+// Índices declarados no schema para nunca serem perdidos no drizzle-kit push.
 // ───────────────────────────────────────────────────────────────────
-export const sensors = mysqlTable('sensors', {
-  id:              varchar('id', { length: 36 }).primaryKey(),
-  tenant_id:       varchar('tenant_id', { length: 36 }).notNull(),
-  unit_id:         varchar('unit_id', { length: 36 }),
-  serial:          varchar('serial', { length: 50 }).notNull().unique(),
-  protocol:        mysqlEnum('protocol', ['ANT+', 'BLE', 'dual']).notNull().default('ANT+'),
-  athlete_id:      varchar('athlete_id', { length: 36 }),               // último atleta (referência histórica)
-  battery_pct:     int('battery_pct'),
-  last_seen:       timestamp('last_seen'),
-  is_active:       tinyint('is_active').notNull().default(1),
-  created_at:      timestamp('created_at').defaultNow(),
-})
-
-// ───────────────────────────────────────────────────────────────────
-// HR_ZONES_CONFIG — configuração de zonas de FC por tenant
-// ───────────────────────────────────────────────────────────────────
-export const hr_zones_config = mysqlTable('hr_zones_config', {
-  id:           varchar('id', { length: 36 }).primaryKey(),
-  tenant_id:    varchar('tenant_id', { length: 36 }).notNull().unique(),
-  // Limites superiores de cada zona (% da FC máxima)
-  z1_max_pct:   int('z1_max_pct').notNull().default(60),
-  z2_max_pct:   int('z2_max_pct').notNull().default(70),
-  z3_max_pct:   int('z3_max_pct').notNull().default(80),
-  z4_max_pct:   int('z4_max_pct').notNull().default(90),
-  // Zona 5: acima de z4_max_pct
-  // Cores hex por zona
-  z1_color:     varchar('z1_color', { length: 7 }).default('#a8d8ea'),
-  z2_color:     varchar('z2_color', { length: 7 }).default('#4caf50'),
-  z3_color:     varchar('z3_color', { length: 7 }).default('#ff9800'),
-  z4_color:     varchar('z4_color', { length: 7 }).default('#f44336'),
-  z5_color:     varchar('z5_color', { length: 7 }).default('#9c27b0'),
-  updated_at:   timestamp('updated_at').defaultNow().onUpdateNow(),
-})
+export const session_hr_series = mysqlTable(
+  'session_hr_series',
+  {
+    id:           varchar('id', { length: 36 }).primaryKey(),
+    session_id:   varchar('session_id', { length: 36 }).notNull(),
+    athlete_id:   varchar('athlete_id', { length: 36 }).notNull(),
+    sensor_id:    varchar('sensor_id', { length: 36 }),
+    timestamp:    datetime('timestamp').notNull(),
+    hr_bpm:       int('hr_bpm').notNull(),
+    hr_zone:      int('hr_zone'),
+    calories_acc: decimal('calories_acc', { precision: 10, scale: 2 }),
+    block_type:   varchar('block_type', { length: 30 }),
+  },
+  (table) => ([
+    index('idx_hrs_session_athlete').on(table.session_id, table.athlete_id),
+    index('idx_hrs_athlete_time').on(table.athlete_id, table.timestamp),
+    index('idx_hrs_session_time').on(table.session_id, table.timestamp),
+  ])
+)

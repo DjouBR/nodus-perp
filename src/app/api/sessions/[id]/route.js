@@ -2,7 +2,8 @@ import { NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/libs/auth'
 import { db } from '@/lib/db/index.js'
-import { training_sessions } from '@/lib/db/schema/sessions'
+import { training_sessions, session_athletes } from '@/lib/db/schema/sessions'
+import { users, athlete_profiles } from '@/lib/db/schema/users'
 import { eq, and, gte } from 'drizzle-orm'
 
 function parseDatetimeLocal(str) {
@@ -13,7 +14,10 @@ function parseDatetimeLocal(str) {
   return new Date(y, mo - 1, d, h, mi, 0, 0)
 }
 
+// ─────────────────────────────────────────────────────────────────────
 // GET /api/sessions/[id]
+// Retorna dados da sessão + lista de atletas para o Lobby (Tela 1)
+// ─────────────────────────────────────────────────────────────────────
 export async function GET(req, { params }) {
   const session = await getServerSession(authOptions)
   if (!session) return NextResponse.json({ error: 'Não autorizado' }, { status: 401 })
@@ -21,24 +25,58 @@ export async function GET(req, { params }) {
   const { id } = await params
 
   try {
+    // 1. Busca dados da sessão
     const [row] = await db
       .select()
       .from(training_sessions)
       .where(and(
         eq(training_sessions.id, id),
-        eq(training_sessions.tenant_id, session.user.tenant_id)
+        // coach independente (tenant_id null): vê só as próprias sessões
+        // tenant_admin/academy_coach: filtra pelo tenant
+        session.user.tenant_id
+          ? eq(training_sessions.tenant_id, session.user.tenant_id)
+          : eq(training_sessions.coach_id, session.user.id)
       ))
 
     if (!row) return NextResponse.json({ error: 'Não encontrado' }, { status: 404 })
-    return NextResponse.json(row)
+
+    // 2. Busca atletas inscritos na sessão com dados do perfil
+    const athleteRows = await db
+      .select({
+        // Dados de inscrição
+        athlete_id:  session_athletes.athlete_id,
+        sensor_id:   session_athletes.sensor_id,
+        checked_in:  session_athletes.checked_in,
+        checkin_at:  session_athletes.checkin_at,
+        // Dados do usuário
+        name:        users.name,
+        email:       users.email,
+        avatar_url:  users.avatar_url,
+        gender:      users.gender,
+        // Dados do perfil esportivo
+        hr_max:      athlete_profiles.hr_max,
+        hr_rest:     athlete_profiles.hr_rest,
+        weight_kg:   athlete_profiles.weight_kg,
+      })
+      .from(session_athletes)
+      .innerJoin(users,            eq(users.id,            session_athletes.athlete_id))
+      .leftJoin(athlete_profiles,  eq(athlete_profiles.user_id, session_athletes.athlete_id))
+      .where(eq(session_athletes.session_id, id))
+      .orderBy(users.name)
+
+    return NextResponse.json({
+      session:  row,
+      athletes: athleteRows,
+    })
   } catch (err) {
     console.error('[GET /api/sessions/id]', err)
     return NextResponse.json({ error: 'Erro interno' }, { status: 500 })
   }
 }
 
+// ─────────────────────────────────────────────────────────────────────
 // PUT /api/sessions/[id]
-// Roles permitidos: tenant_admin, academy_coach, coach (independente)
+// ─────────────────────────────────────────────────────────────────────
 export async function PUT(req, { params }) {
   const session = await getServerSession(authOptions)
   if (!session) return NextResponse.json({ error: 'Não autorizado' }, { status: 401 })
@@ -56,7 +94,6 @@ export async function PUT(req, { params }) {
     target_zone_min, target_zone_max, notes, status
   } = body
 
-  // Busca a sessão para validar ownership
   const [existing] = await db
     .select({ coach_id: training_sessions.coach_id, tenant_id: training_sessions.tenant_id })
     .from(training_sessions)
@@ -64,20 +101,12 @@ export async function PUT(req, { params }) {
 
   if (!existing) return NextResponse.json({ error: 'Não encontrado' }, { status: 404 })
 
-  // academy_coach: só edita as próprias sessões
-  if (role === 'academy_coach' && existing.coach_id !== session.user.id) {
+  if (role === 'academy_coach' && existing.coach_id !== session.user.id)
     return NextResponse.json({ error: 'Acesso negado' }, { status: 403 })
-  }
-
-  // coach independente: só edita as próprias sessões (tenant_id é null para coach)
-  if (role === 'coach' && existing.coach_id !== session.user.id) {
+  if (role === 'coach' && existing.coach_id !== session.user.id)
     return NextResponse.json({ error: 'Acesso negado' }, { status: 403 })
-  }
-
-  // tenant_admin: só edita sessões do seu tenant
-  if (role === 'tenant_admin' && existing.tenant_id !== session.user.tenant_id) {
+  if (role === 'tenant_admin' && existing.tenant_id !== session.user.tenant_id)
     return NextResponse.json({ error: 'Acesso negado' }, { status: 403 })
-  }
 
   const durMin = duration_min || 60
   const start  = parseDatetimeLocal(start_datetime)
@@ -107,10 +136,12 @@ export async function PUT(req, { params }) {
   }
 }
 
+// ─────────────────────────────────────────────────────────────────────
 // DELETE /api/sessions/[id]
 // Query params:
 //   ?scope=single  → apaga só esta sessão (default)
 //   ?scope=future  → apaga esta e todas as futuras do mesmo grupo
+// ─────────────────────────────────────────────────────────────────────
 export async function DELETE(req, { params }) {
   const session = await getServerSession(authOptions)
   if (!session) return NextResponse.json({ error: 'Não autorizado' }, { status: 401 })
@@ -130,13 +161,10 @@ export async function DELETE(req, { params }) {
 
   if (!target) return NextResponse.json({ error: 'Não encontrado' }, { status: 404 })
 
-  // Valida ownership
-  if ((role === 'academy_coach' || role === 'coach') && target.coach_id !== session.user.id) {
+  if ((role === 'academy_coach' || role === 'coach') && target.coach_id !== session.user.id)
     return NextResponse.json({ error: 'Acesso negado' }, { status: 403 })
-  }
-  if (role === 'tenant_admin' && target.tenant_id !== session.user.tenant_id) {
+  if (role === 'tenant_admin' && target.tenant_id !== session.user.tenant_id)
     return NextResponse.json({ error: 'Acesso negado' }, { status: 403 })
-  }
 
   try {
     if (scope === 'future' && target.recurrence_group_id) {
@@ -149,7 +177,6 @@ export async function DELETE(req, { params }) {
       await db.delete(training_sessions)
         .where(eq(training_sessions.id, id))
     }
-
     return NextResponse.json({ ok: true })
   } catch (err) {
     console.error('[DELETE /api/sessions/id]', err)
