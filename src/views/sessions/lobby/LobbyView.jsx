@@ -20,7 +20,11 @@ import {
   Avatar, Tooltip, IconButton,
   MenuItem, Select, FormControl,
   Divider, Typography, Box, Alert,
-  Snackbar,
+  Snackbar, Dialog, DialogTitle,
+  DialogContent, DialogActions,
+  TextField, List, ListItem,
+  ListItemAvatar, ListItemText,
+  ListItemButton,
 } from '@mui/material'
 import Grid from '@mui/material/Grid'
 
@@ -44,6 +48,136 @@ const useSensors = () => {
     ])
   }, [])
   return sensors
+}
+
+// ──────────────────────────────────────────────────
+// MODAL DE WALK-IN
+// ──────────────────────────────────────────────────
+function WalkInModal({ open, onClose, sessionId, onAdded, showSnack }) {
+  const [query,   setQuery]   = useState('')
+  const [results, setResults] = useState([])
+  const [loading, setLoading] = useState(false)
+  const [adding,  setAdding]  = useState(null) // athlete_id sendo adicionado
+
+  // Busca atletas do tenant conforme o usuário digita
+  useEffect(() => {
+    if (!open) { setQuery(''); setResults([]); return }
+    if (query.trim().length < 2) { setResults([]); return }
+    const timer = setTimeout(async () => {
+      setLoading(true)
+      try {
+        const res  = await fetch(`/api/athletes?search=${encodeURIComponent(query)}&limit=20`)
+        const data = await res.json()
+        setResults(data.athletes ?? data ?? [])
+      } catch {
+        setResults([])
+      } finally {
+        setLoading(false)
+      }
+    }, 350)
+    return () => clearTimeout(timer)
+  }, [query, open])
+
+  const handleAdd = async (athlete) => {
+    setAdding(athlete.id)
+    try {
+      const res  = await fetch(`/api/sessions/${sessionId}/walkin`, {
+        method:  'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body:    JSON.stringify({ athleteId: athlete.id }),
+      })
+      const data = await res.json()
+      if (!res.ok) {
+        showSnack(data.error ?? 'Erro ao adicionar atleta', 'error')
+        return
+      }
+      // Monta o objeto no mesmo formato que a lista de atletas usa
+      onAdded({
+        athlete_id: athlete.id,
+        name:       athlete.name,
+        avatar_url: athlete.avatar_url ?? null,
+        hr_max:     athlete.hr_max ?? null,
+        checked_in: 1,
+        sensor_id:  null,
+        walk_in:    true,
+      })
+      showSnack(`${athlete.name} adicionado como walk-in ✓`, 'success')
+      onClose()
+    } catch {
+      showSnack('Erro de rede ao adicionar atleta', 'error')
+    } finally {
+      setAdding(null)
+    }
+  }
+
+  return (
+    <Dialog open={open} onClose={onClose} maxWidth="sm" fullWidth>
+      <DialogTitle sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+        <Icon icon="user-plus" style={{ fontSize: 22 }} />
+        Adicionar Atleta — Walk-in
+      </DialogTitle>
+
+      <DialogContent dividers>
+        <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+          Busque um atleta cadastrado no sistema para adicioná-lo diretamente nesta sessão,
+          sem inscrição prévia.
+        </Typography>
+
+        <TextField
+          autoFocus
+          fullWidth
+          size="small"
+          placeholder="Buscar pelo nome do atleta…"
+          value={query}
+          onChange={e => setQuery(e.target.value)}
+          InputProps={{
+            startAdornment: <Icon icon="search" style={{ fontSize: 18, marginRight: 8, color: '#888' }} />,
+            endAdornment: loading ? <CircularProgress size={16} /> : null,
+          }}
+        />
+
+        {results.length > 0 && (
+          <List dense sx={{ mt: 1, maxHeight: 320, overflowY: 'auto' }}>
+            {results.map(athlete => (
+              <ListItem key={athlete.id} disablePadding>
+                <ListItemButton onClick={() => handleAdd(athlete)} disabled={adding === athlete.id}>
+                  <ListItemAvatar>
+                    <Avatar src={athlete.avatar_url} sx={{ width: 36, height: 36, bgcolor: 'primary.main', fontSize: 14 }}>
+                      {athlete.name?.charAt(0).toUpperCase()}
+                    </Avatar>
+                  </ListItemAvatar>
+                  <ListItemText
+                    primary={athlete.name}
+                    secondary={`FC máx: ${athlete.hr_max ?? '--'} bpm`}
+                  />
+                  {adding === athlete.id
+                    ? <CircularProgress size={20} />
+                    : <Icon icon="plus" style={{ fontSize: 18, color: '#1aff15' }} />
+                  }
+                </ListItemButton>
+              </ListItem>
+            ))}
+          </List>
+        )}
+
+        {query.trim().length >= 2 && !loading && results.length === 0 && (
+          <Typography variant="body2" color="text.secondary" sx={{ mt: 2, textAlign: 'center' }}>
+            Nenhum atleta encontrado para "{query}".
+          </Typography>
+        )}
+
+        {query.trim().length < 2 && (
+          <Typography variant="body2" color="text.secondary" sx={{ mt: 2, textAlign: 'center' }}>
+            Digite pelo menos 2 caracteres para buscar.
+          </Typography>
+        )}
+      </DialogContent>
+
+      <DialogActions>
+        <Button onClick={onClose} color="inherit">Fechar</Button>
+      </DialogActions>
+    </Dialog>
+  )
 }
 
 // ──────────────────────────────────────────────────
@@ -99,9 +233,14 @@ function AthleteCard({ athlete, sensors, sessionId, onUpdate }) {
 
         {/* Nome + status */}
         <Box sx={{ flex: 1, minWidth: 0 }}>
-          <Typography variant="body1" fontWeight={600} noWrap>
-            {athlete.name}
-          </Typography>
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+            <Typography variant="body1" fontWeight={600} noWrap>
+              {athlete.name}
+            </Typography>
+            {athlete.walk_in && (
+              <Chip label="Walk-in" size="small" color="warning" variant="tonal" />
+            )}
+          </Box>
           <Typography variant="caption" color="text.secondary">
             FC máx: {athlete.hr_max ?? '--'} bpm
           </Typography>
@@ -151,13 +290,14 @@ function AthleteCard({ athlete, sensors, sessionId, onUpdate }) {
 // ──────────────────────────────────────────────────
 export default function LobbyView({ sessionId }) {
   const sensors    = useSensors()
-  const [session,   setSession]   = useState(null)
-  const [athletes,  setAthletes]  = useState([])
+  const [session,    setSession]    = useState(null)
+  const [athletes,   setAthletes]   = useState([])
   const [monitorUrl, setMonitorUrl] = useState('')
-  const [antOk,     setAntOk]    = useState(null)   // null=verificando, true/false
-  const [starting,  setStarting]  = useState(false)
-  const [started,   setStarted]   = useState(false)
-  const [snack,     setSnack]     = useState({ open: false, msg: '', severity: 'info' })
+  const [antOk,      setAntOk]      = useState(null)   // null=verificando, true/false
+  const [starting,   setStarting]   = useState(false)
+  const [started,    setStarted]    = useState(false)
+  const [snack,      setSnack]      = useState({ open: false, msg: '', severity: 'info' })
+  const [walkInOpen, setWalkInOpen] = useState(false)
 
   const showSnack = (msg, severity = 'info') => setSnack({ open: true, msg, severity })
 
@@ -203,6 +343,11 @@ export default function LobbyView({ sessionId }) {
     )
   }, [])
 
+  // ── Adiciona walk-in à lista local ──
+  const handleWalkInAdded = useCallback((newAthlete) => {
+    setAthletes(prev => [...prev, newAthlete])
+  }, [])
+
   // ── Iniciar Sessão ──
   const handleStart = async () => {
     const checkedCount = athletes.filter(a => a.checked_in).length
@@ -225,8 +370,8 @@ export default function LobbyView({ sessionId }) {
     }
   }
 
-  const checkedCount   = athletes.filter(a => a.checked_in).length
-  const totalAthletes  = athletes.length
+  const checkedCount  = athletes.filter(a => a.checked_in).length
+  const totalAthletes = athletes.length
 
   // ── Copiar link do monitor ──
   const copyMonitorUrl = () => {
@@ -307,13 +452,26 @@ export default function LobbyView({ sessionId }) {
       )}
 
       {/* ── LISTA DE ATLETAS ── */}
-      <Typography variant="h6" fontWeight={600} sx={{ mb: 2 }}>
-        <Icon icon="list-check" style={{ marginRight: 8 }} />
-        Confirmar Presenças
-      </Typography>
+      <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 2, flexWrap: 'wrap', gap: 1 }}>
+        <Typography variant="h6" fontWeight={600}>
+          <Icon icon="list-check" style={{ marginRight: 8 }} />
+          Confirmar Presenças
+        </Typography>
+
+        {/* Botão Walk-in — visível para staff */}
+        <Button
+          variant="outlined"
+          size="small"
+          startIcon={<Icon icon="user-plus" />}
+          onClick={() => setWalkInOpen(true)}
+          sx={{ borderStyle: 'dashed' }}
+        >
+          + Walk-in
+        </Button>
+      </Box>
 
       {athletes.length === 0 ? (
-        <Alert severity="warning">Nenhum atleta inscrito nesta sessão.</Alert>
+        <Alert severity="warning">Nenhum atleta inscrito nesta sessão. Use o botão Walk-in para adicionar.</Alert>
       ) : (
         <Grid container spacing={2}>
           {athletes.map(athlete => (
@@ -357,6 +515,15 @@ export default function LobbyView({ sessionId }) {
           {started ? 'Sessão Ativa' : 'Iniciar Sessão'}
         </Button>
       </Box>
+
+      {/* ── MODAL WALK-IN ── */}
+      <WalkInModal
+        open={walkInOpen}
+        onClose={() => setWalkInOpen(false)}
+        sessionId={sessionId}
+        onAdded={handleWalkInAdded}
+        showSnack={showSnack}
+      />
 
       {/* ── SNACKBAR ── */}
       <Snackbar
