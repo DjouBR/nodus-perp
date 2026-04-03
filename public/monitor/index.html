@@ -94,6 +94,44 @@ body { padding: 0; margin: 0; }
   z-index: 9999;
   text-align: center;
 }
+
+/* ── Sessão em breve ── */
+#session-soon-overlay {
+  display: none;
+  position: fixed;
+  inset: 0;
+  background: #0a0a0a;
+  color: #fff;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  z-index: 9999;
+  text-align: center;
+  gap: 20px;
+  font-family: sans-serif;
+}
+#soon-countdown {
+  font-size: 6rem;
+  font-weight: 900;
+  font-variant-numeric: tabular-nums;
+  color: #1aff15;
+  letter-spacing: 0.05em;
+  line-height: 1;
+}
+#soon-session-name {
+  font-size: 2.2rem;
+  font-weight: 900;
+  color: #fff;
+}
+@keyframes dumbbell-pulse {
+  0%, 100% { transform: scale(1); opacity: 1; }
+  50%       { transform: scale(1.08); opacity: 0.85; }
+}
+#soon-icon {
+  font-size: 5rem;
+  color: #1aff15;
+  animation: dumbbell-pulse 2s ease-in-out infinite;
+}
 </style>
 </head>
 <body>
@@ -104,6 +142,15 @@ body { padding: 0; margin: 0; }
     <i class="fa-solid fa-flag-checkered" style="font-size:5rem;margin-bottom:1rem;"></i><br>
     Sessão Encerrada
   </div>
+</div>
+
+<!-- Overlay: sessão em breve (status scheduled/pending) -->
+<div id="session-soon-overlay">
+  <i id="soon-icon" class="fa-solid fa-dumbbell"></i>
+  <div id="soon-session-name">—</div>
+  <div style="font-size:1.1rem;color:#aaa;">A sessão começa em</div>
+  <div id="soon-countdown">00:00:00</div>
+  <div style="font-size:0.9rem;color:#555;margin-top:4px;">Esta tela atualizará automaticamente quando a sessão iniciar</div>
 </div>
 
 <div id="gridContainer" style="display:flex; flex-wrap:wrap; position:relative;">
@@ -133,12 +180,9 @@ body { padding: 0; margin: 0; }
 // CONFIGURAÇÃO — lida da URL: /monitor/[token]
 // ══════════════════════════════════════════════════════════════
 
-// Extrai token do path: /monitor/[token]  ou  /monitor/index.html?token=...
 function getTokenFromUrl() {
   const parts = window.location.pathname.split('/').filter(Boolean)
-  // /monitor/TOKEN  → parts = ['monitor', 'TOKEN']
   if (parts.length >= 2 && parts[0] === 'monitor') return parts[1]
-  // fallback: query param ?token=
   return new URLSearchParams(window.location.search).get('token')
 }
 
@@ -148,6 +192,7 @@ let SESSION_NAME = null
 let ANT_PORT     = '3001'
 let timerInterval = null
 let sessionStartTime = null
+let countdownInterval = null
 
 // ══════════════════════════════════════════════════════════════
 // MAPA DE CORES POR ZONA
@@ -169,7 +214,7 @@ const ZONE_TO_COLOR_CLASS = {
 }
 
 // ══════════════════════════════════════════════════════════════
-// TEMPLATES DE CARDS (mantidos 100% do original)
+// TEMPLATES DE CARDS
 // ══════════════════════════════════════════════════════════════
 const CARD_TEMPLATES = {
   '01_01': `
@@ -593,7 +638,6 @@ function createCardFromTemplate(templateKey, data, size, studentId, totalCards) 
   temp.innerHTML = CARD_TEMPLATES[templateKey].trim()
   Array.from(temp.childNodes).forEach(n => wrapper.appendChild(n.cloneNode(true)))
 
-  // IDs únicos por atleta
   const svg = wrapper.querySelector('#chart-green')
   if (svg) svg.id = `chart-${studentId}`
   const txt = wrapper.querySelector('#text-green')
@@ -601,7 +645,6 @@ function createCardFromTemplate(templateKey, data, size, studentId, totalCards) 
   const cnt = wrapper.querySelector('#chart-container-green')
   if (cnt) cnt.id = `container-${studentId}`
 
-  // Preenche dados iniciais
   const fill = (sel, val) => { const el = wrapper.querySelector(sel); if (el) el.textContent = val ?? '' }
   fill('[data-name]',     data.studentName || `ID ${studentId}`)
   fill('[data-calories]', Math.round(data.calories ?? 0))
@@ -678,12 +721,34 @@ function startTimer(fromMs) {
 }
 
 // ══════════════════════════════════════════════════════════════
-// SESSÃO ENCERRADA
+// OVERLAYS
 // ══════════════════════════════════════════════════════════════
 function showSessionEnded() {
   if (timerInterval) clearInterval(timerInterval)
+  if (countdownInterval) clearInterval(countdownInterval)
   const overlay = document.getElementById('session-ended-overlay')
   overlay.style.display = 'flex'
+}
+
+function showSessionSoon(sessionName, scheduledAt) {
+  document.getElementById('soon-session-name').textContent = sessionName
+  const overlay = document.getElementById('session-soon-overlay')
+  overlay.style.display = 'flex'
+
+  function tick() {
+    const diff = Math.max(0, Math.floor((new Date(scheduledAt) - Date.now()) / 1000))
+    const h = Math.floor(diff / 3600)
+    const m = Math.floor((diff % 3600) / 60)
+    const s = diff % 60
+    document.getElementById('soon-countdown').textContent =
+      `${String(h).padStart(2,'0')}:${String(m).padStart(2,'0')}:${String(s).padStart(2,'0')}`
+    if (diff === 0) {
+      clearInterval(countdownInterval)
+      setTimeout(() => window.location.reload(), 2000)
+    }
+  }
+  tick()
+  countdownInterval = setInterval(tick, 1000)
 }
 
 // ══════════════════════════════════════════════════════════════
@@ -717,7 +782,6 @@ function connect() {
   ws.onopen = () => {
     console.log('[WS] Conectado')
     showConnected()
-    // Envia sessionId para filtrar apenas atletas desta sessão
     try {
       ws.send(JSON.stringify({ type: 'request_data', sessionId: SESSION_ID }))
     } catch(e) {}
@@ -733,7 +797,6 @@ function connect() {
           if (d?.studentId !== undefined) studentsData.set(d.studentId, d)
         })
         renderAllCards()
-        // Inicia cronômetro com elapsed se o servidor enviar
         if (msg.elapsedMs) startTimer(msg.elapsedMs)
         else startTimer(0)
         return
@@ -742,7 +805,6 @@ function connect() {
       if (msg.type === 'heartrate') {
         const d = msg.data
         if (!d || d.studentId === undefined) return
-        // Calcula percent e zona se ausentes
         if (d.percent === undefined || d.percent === null) {
           d.percent = Math.round((Number(d.heartRate || 0) / (d.maxHeartRate || 200)) * 100)
         }
@@ -798,7 +860,6 @@ function connect() {
   }
 }
 
-// Keepalive ping a cada 30s
 setInterval(() => {
   if (ws && ws.readyState === WebSocket.OPEN) {
     try { ws.send(JSON.stringify({ type: 'ping' })) } catch(e) {}
@@ -834,6 +895,26 @@ async function boot() {
 
     document.getElementById('sessionNameHeader').textContent = SESSION_NAME
     document.title = `NODUS — ${SESSION_NAME}`
+
+    // Verifica status antes de conectar ao WebSocket
+    const status = json.sessionStatus
+    if (status === 'scheduled' || status === 'pending') {
+      showSessionSoon(SESSION_NAME, json.scheduledAt)
+      // Polling a cada 30s para detectar início da sessão
+      setInterval(async () => {
+        try {
+          const r = await fetch(`/api/monitor/${PAGE_TOKEN}`)
+          const j = await r.json()
+          if (j.ok && j.sessionStatus === 'active') window.location.reload()
+        } catch {}
+      }, 30_000)
+      return
+    }
+
+    if (status === 'ended' || status === 'cancelled' || status === 'finished') {
+      showSessionEnded()
+      return
+    }
 
     connect()
     startTokenPolling()
