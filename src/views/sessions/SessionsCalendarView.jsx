@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useEffect, useRef, useCallback } from 'react'
+import { useSession } from 'next-auth/react'
 import { useMediaQuery, useTheme } from '@mui/material'
 import FullCalendar from '@fullcalendar/react'
 import dayGridPlugin from '@fullcalendar/daygrid'
@@ -51,6 +52,10 @@ export default function SessionsCalendarView() {
   const theme   = useTheme()
   const mdAbove = useMediaQuery(theme.breakpoints.up('md'))
   const calendarRef = useRef(null)
+
+  // Role do usuário logado — usado pelo SessionDrawer para exibir o botão Lobby
+  const { data: authSession } = useSession()
+  const userRole = authSession?.user?.role
 
   const [events, setEvents]                   = useState([])
   const [sessionTypes, setSessionTypes]       = useState([])
@@ -213,6 +218,7 @@ export default function SessionsCalendarView() {
           session={selectedSession}
           sessionTypes={sessionTypes}
           defaultDate={clickedDate}
+          userRole={userRole}
           onClose={() => { setDrawerOpen(false); setSelectedSession(null) }}
           onSave={handleSave}
           onDelete={handleDelete}
