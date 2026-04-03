@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useEffect, useCallback } from 'react'
+import { useRouter } from 'next/navigation'
 import Drawer from '@mui/material/Drawer'
 import Box from '@mui/material/Box'
 import Typography from '@mui/material/Typography'
@@ -56,6 +57,9 @@ const DEFAULT_VALUES = {
   status: 'scheduled',
 }
 
+// Roles que têm acesso à Sala de Espera
+const LOBBY_ROLES = ['tenant_admin', 'academy_coach', 'coach', 'receptionist']
+
 function toLocalInput(dt) {
   if (!dt) return ''
   const d   = new Date(dt)
@@ -71,10 +75,18 @@ export default function SessionDrawer({
   onClose,
   onSave,
   onDelete,
+  userRole,   // role do usuário logado (passado pelo pai)
 }) {
+  const router      = useRouter()
   const isEdit      = !!session?.id
   const isRecurring = !!session?.recurrence_group_id
   const isFinished  = session?.status === 'finished'
+
+  // Botão Lobby: só em sessões agendadas ou em andamento, para roles de staff
+  const canOpenLobby =
+    isEdit &&
+    ['scheduled', 'active'].includes(session?.status) &&
+    LOBBY_ROLES.includes(userRole)
 
   const [form, setForm]       = useState(DEFAULT_VALUES)
   const [loading, setLoading] = useState(false)
@@ -414,17 +426,35 @@ export default function SessionDrawer({
         </Box>
 
         {/* Footer */}
-        <Box className='plb-4 pli-6 border-bs flex gap-3'>
-          <Button
-            fullWidth variant='contained'
-            onClick={handleSubmit}
-            disabled={loading || !form.name || !form.start_datetime || (recurring && (selectedDays.length === 0 || !endDate))}
-          >
-            {loading ? 'Salvando…' : isEdit ? 'Atualizar' : recurring ? 'Criar sessões recorrentes' : 'Criar sessão'}
-          </Button>
-          <Button fullWidth variant='outlined' color='secondary' onClick={onClose}>
-            Cancelar
-          </Button>
+        <Box className='plb-4 pli-6 border-bs flex flex-col gap-2'>
+          {/* Botão Sala de Espera — visível apenas para staff em sessões ativas/agendadas */}
+          {canOpenLobby && (
+            <Button
+              fullWidth
+              variant='tonal'
+              color='primary'
+              startIcon={<i className='tabler-door-enter text-xl' />}
+              onClick={() => {
+                onClose()
+                router.push(`/sessions/${session.id}/lobby`)
+              }}
+            >
+              Abrir Sala de Espera
+            </Button>
+          )}
+
+          <div className='flex gap-3'>
+            <Button
+              fullWidth variant='contained'
+              onClick={handleSubmit}
+              disabled={loading || !form.name || !form.start_datetime || (recurring && (selectedDays.length === 0 || !endDate))}
+            >
+              {loading ? 'Salvando…' : isEdit ? 'Atualizar' : recurring ? 'Criar sessões recorrentes' : 'Criar sessão'}
+            </Button>
+            <Button fullWidth variant='outlined' color='secondary' onClick={onClose}>
+              Cancelar
+            </Button>
+          </div>
         </Box>
       </Drawer>
 
