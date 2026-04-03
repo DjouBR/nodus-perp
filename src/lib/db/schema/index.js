@@ -8,3 +8,4 @@ export * from './monitoring.js'
 export * from './training.js'
 export * from './gamification.js'
 export * from './financial.js'
+export * from './config.js'      // hr_zones_config + sensors
