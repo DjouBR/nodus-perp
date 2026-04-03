@@ -13,10 +13,10 @@
 
 import { NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
-import { authOptions } from '@/app/api/auth/[...nextauth]/route'
+import { authOptions } from '@/libs/auth'          // ← correto: não importar do route.js
 import { db } from '@/lib/db'
 import { session_monitor_tokens, training_sessions } from '@/lib/db/schema'
-import { eq, and, eq as eq2 } from 'drizzle-orm'
+import { eq, and } from 'drizzle-orm'
 import { randomUUID } from 'crypto'
 
 export async function POST(req, { params }) {
