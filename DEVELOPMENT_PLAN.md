@@ -324,11 +324,11 @@
 
 ---
 
-## ✅ FASE 7 — Monitoramento ANT+ em Tempo Real (Concluída — 26-27/03/2026)
+## ✅ FASE 7 — Monitoramento ANT+ em Tempo Real (Em andamento)
 
 > Pipeline completo ANT+ → WebSocket → banco de dados validado com dispositivo físico real.
 
-### Etapa 7.1 — Servidor ANT+/WebSocket ✅
+### ✅ Etapa 7.1 — Servidor ANT+/WebSocket (Concluída — 26/03/2026)
 - [x] `ant-server/antService.js` — `AntService` com Continuous Scanning Mode (`HeartRateScanner`)
   - Suporta 42+ dispositivos simultâneos sem limite de canais
   - Métodos: `start()`, `stop()`, `scanForDevice(deviceId)`, `onHeartRateData(cb)`
@@ -350,13 +350,50 @@
   - REST mínima: `GET /health`, `POST /ant/start|stop`, `GET /ant/status`, `POST /ant/reset`
   - Graceful shutdown com `SIGTERM`/`SIGINT`
 
-### Etapa 7.2 — Persistência de FC no banco ✅
+### ✅ Etapa 7.2 — Persistência de FC no banco (Concluída — 27/03/2026)
 - [x] Tabela `session_hr_series` — gravação validada em ambiente real
   - Colunas: `id`, `session_id`, `athlete_id`, `sensor_id`, `timestamp`, `hr_bpm`, `hr_zone`, `calories_acc`, `block_type`
 - [x] Throttle de 5s por atleta funcionando (2 registros em ~10s de teste confirmado)
 - [x] `autoCheckin` automático ao detectar FC durante sessão ativa
 
-### Decisões e descobertas desta fase
+### ✅ Etapa 7.3 — Sala de Espera / Lobby (Tela 1) (Concluída — 01/04/2026)
+- [x] `LobbyView.jsx` — tela de pré-sessão para staff
+  - Carrega atletas inscritos + status de check-in
+  - Confirmação de presença (check-in manual pelo staff)
+  - Atribuição de sensor ANT+ por atleta
+  - Gera e exibe link do Monitor de Atletas (Tela 2)
+  - Botão "Iniciar Sessão" → PUT `/api/sessions/[id]/start`
+- [x] **Walk-in** (03/04/2026): botão "+ Walk-in" com modal de busca de atletas
+  - Busca em tempo real via `GET /api/athletes?search=...`
+  - Insere via `POST /api/sessions/[id]/walkin` com `status = 'walk_in'`
+  - Atleta aparece na lista imediatamente com badge **Walk-in** no card
+  - Visível para: `coach`, `academy_coach`, `tenant_admin`, `receptionist`
+- [x] **Correção NextAuth** (01/04/2026): erro ao abrir sala de espera resolvido
+
+### ✅ Etapa 7.4 — Monitor de Atletas / TV (Tela 2) (Concluída — 02/04/2026)
+- [x] `public/monitor/index.html` — tela fullscreen para TV/SmartTV
+  - Acesso via token púublico (sem autenticação): `/monitor/[token]`
+  - Grade de cards dinâmica por número de atletas (1 a 42+)
+  - Atualização em tempo real via WebSocket (`ws://[host]:3001/ws/heartrate`)
+  - Cards com FC, zona colorida, calorias, % FC máx, cronômetro de sessão
+  - Overlay **"Sessão Encerrada"** quando token revogado ou sessão finalizada
+  - Overlay **"Sessão em Breve"** com countdown regressivo para sessões `scheduled`/`pending`
+    - Polling a cada 30s: recarrega automaticamente quando sessão muda para `active`
+    - Evita conexão prematura ao WS antes da sessão começar
+- [x] `GET /api/monitor/[token]` — rota pública que valida o token e retorna:
+  - `sessionId`, `sessionName`, `sessionStatus`, `scheduledAt`, `tenantId`, `antServerPort`
+
+### 🔲 Etapa 7.5 — Monitor Treinador (Tela 3) (Próximo passo)
+- [ ] View `/sessions/[id]/monitor` — tela com autenticação para o coach
+  - Mesmos dados do Monitor TV + controles de sessão
+  - Botões: "Encerrar Sessão", "Resetar Calorias", "Remover Atleta"
+  - Gráfico de histórico de FC em tempo real por atleta
+  - Alertas visuais: FC acima de Z5, atleta desconectado
+- [ ] `PUT /api/sessions/[id]/finish` — muda status para `finished` + agrega métricas
+  - Pontuação por zona: `Z1×1.0 + Z2×1.5 + Z3×2.5 + Z4×4.0 + Z5×3.0` pts/min
+- [ ] Etapa 7.6 — Check-in automático via FC (já funciona parcialmente via `autoCheckin`)
+
+### Decisões e descobertas da Fase 7
 
 | Item | Decisão/Descoberta |
 |---|---|
@@ -365,20 +402,6 @@
 | Solução timezone | `SET GLOBAL time_zone = '-03:00'` + `default-time-zone = '-03:00'` no `my.ini` |
 | `sensors.serial` | Deve conter o `DeviceId` ANT+ numérico real (ex: `42873`) — valores como `ANT0001` são ignorados |
 | `session_id = null` | Ocorre quando a sessão não está `active` OU `start_datetime > NOW()` — sessão precisa estar ativa e no horário |
-
-### Etapas pendentes da Fase 7
-- [ ] **Etapa 7.3** — Tela de Monitoramento em Tempo Real (`/monitoring`)
-  - Hook `useAntWebSocket(sessionId)` — client-side WebSocket hook com reconexão automática
-  - `MonitoringView` — grade de cards por atleta (FC, zona colorida, calorias, % FC máx)
-  - Seletor de sessão ativa — filtrar atletas por `session_id`
-  - Botões "Iniciar Sessão" / "Encerrar Sessão"
-  - `PUT /api/sessions/[id]/start` — muda status para `active`
-  - `PUT /api/sessions/[id]/finish` — muda para `finished` + agrega métricas em `session_athletes`
-  - Pontuação por zona ao encerrar: `Z1×1.0 + Z2×1.5 + Z3×2.5 + Z4×4.0 + Z5×3.0` pts/min
-    - Configurável por academia/coach no futuro
-- [ ] **Etapa 7.4** — Tela TV (`/monitoring/tvscreen`) — fullscreen sem autenticação
-- [ ] **Etapa 7.5** — Check-in automático via FC (já funciona parcialmente via `autoCheckin`)
-- [ ] **Etapa 7.6** — Dashboard ao vivo com dados do WebSocket
 
 ---
 
@@ -445,7 +468,7 @@
 - [ ] Sistema de badges e conquistas
 - [ ] Ranking por academia
 - [ ] Pontuação por sessão: `Z1×1.0 + Z2×1.5 + Z3×2.5 + Z4×4.0 + Z5×3.0` pts/min (configurável)
-- [ ] Tela de ranking público (TV)
+- [ ] Tela de ranking púublico (TV)
 - [ ] XP acumulado, streaks de frequência, leaderboard global por período
 
 ---
@@ -473,7 +496,7 @@
 - [x] `/coaches/[id]` *(concluído na Fase 4)*
 - [ ] `/academy/coaches`, `/academy/athletes`, `/academy/recepcionist`
 - [ ] `/academy_coach/athletes`
-- [ ] Demais páginas role-específicas
+- [ ] Demais páginas role-especÚtaficas
 
 ---
 
@@ -592,4 +615,4 @@
 
 ---
 
-*Última atualização: 27/03/2026 — Fase 7 (servidor ANT+/WS + persistência) concluída ✅ | Etapa 7.3 (tela /monitoring) é o próximo passo 🔲*
+*Última atualização: 03/04/2026 — Etapas 7.3 (Lobby + Walk-in) e 7.4 (Monitor TV + Sessão em Breve) concluídas ✅ | Próximo: Etapa 7.5 — Monitor Treinador (Tela 3) 🔲*
