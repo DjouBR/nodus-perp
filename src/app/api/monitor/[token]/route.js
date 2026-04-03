@@ -6,13 +6,15 @@
  *   - sessionId
  *   - tenantId
  *   - sessionName
- *   - status da sessão
+ *   - sessionStatus
+ *   - scheduledAt  ← novo: usado pelo overlay "Sessão em Breve"
  *   - antServerUrl (ws://)
  *
  * O monitor.html usa esses dados para:
  *   1. Montar a URL do WebSocket filtrando apenas atletas da sessão
  *   2. Exibir o nome da sessão no header
  *   3. Bloquear exibição se o token estiver revogado ou expirado
+ *   4. Exibir countdown se a sessão ainda não iniciou (status scheduled/pending)
  */
 
 import { NextResponse } from 'next/server'
@@ -51,9 +53,10 @@ export async function GET(req, { params }) {
     // 2. Busca dados da sessão
     const [session] = await db
       .select({
-        id:     training_sessions.id,
-        name:   training_sessions.name,
-        status: training_sessions.status,
+        id:           training_sessions.id,
+        name:         training_sessions.name,
+        status:       training_sessions.status,
+        scheduled_at: training_sessions.scheduled_start,
       })
       .from(training_sessions)
       .where(eq(training_sessions.id, row.session_id))
@@ -67,12 +70,13 @@ export async function GET(req, { params }) {
     const antServerPort = process.env.ANT_SERVER_PORT || '3001'
 
     return NextResponse.json({
-      ok:           true,
-      sessionId:    session.id,
-      sessionName:  session.name,
+      ok:            true,
+      sessionId:     session.id,
+      sessionName:   session.name,
       sessionStatus: session.status,
-      tenantId:     row.tenant_id,
-      antServerPort,           // usado pelo monitor.html para montar ws://[host]:[port]/ws/heartrate
+      scheduledAt:   session.scheduled_at,   // usado pelo overlay "Sessão em Breve"
+      tenantId:      row.tenant_id,
+      antServerPort,                          // usado pelo monitor.html para montar ws://[host]:[port]/ws/heartrate
     })
   } catch (err) {
     console.error('[GET /api/monitor/token] Error:', err)
