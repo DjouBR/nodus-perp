@@ -13,7 +13,7 @@
 
 import { NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
-import { authOptions } from '@/libs/auth'          // ← correto: não importar do route.js
+import { authOptions } from '@/libs/auth'
 import { db } from '@/lib/db'
 import { session_monitor_tokens, training_sessions } from '@/lib/db/schema'
 import { eq, and } from 'drizzle-orm'
@@ -61,11 +61,21 @@ export async function POST(req, { params }) {
       })
     }
 
-    // 3. Cria novo token — expira no scheduled_end + 2 horas (ou agora + 8h como fallback)
-    const baseExpiry = trainingSession.scheduled_end
-      ? new Date(trainingSession.scheduled_end)
-      : new Date()
-    baseExpiry.setHours(baseExpiry.getHours() + 2)
+    // 3. Calcula expires_at:
+    //    - Prioridade 1: scheduled_end + 2h (sessão tem horário de fim previsto)
+    //    - Prioridade 2: scheduled_start + 24h (sessão futura sem horário de fim)
+    //    - Fallback:     agora + 24h
+    let baseExpiry
+    if (trainingSession.scheduled_end) {
+      baseExpiry = new Date(trainingSession.scheduled_end)
+      baseExpiry.setHours(baseExpiry.getHours() + 2)
+    } else if (trainingSession.scheduled_start) {
+      baseExpiry = new Date(trainingSession.scheduled_start)
+      baseExpiry.setHours(baseExpiry.getHours() + 24)
+    } else {
+      baseExpiry = new Date()
+      baseExpiry.setHours(baseExpiry.getHours() + 24)
+    }
 
     const newToken = randomUUID()
 
