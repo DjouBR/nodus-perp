@@ -19,6 +19,19 @@ function parseDatetimeLocal(str) {
   return new Date(str + '-03:00')
 }
 
+/**
+ * Serializa um objeto do Drizzle convertendo todos os campos Date para ISO string.
+ * Necessário para evitar o erro RSC: "Only plain objects can be passed to Client Components".
+ */
+function serializeRow(row) {
+  if (!row || typeof row !== 'object') return row
+  const out = {}
+  for (const [k, v] of Object.entries(row)) {
+    out[k] = v instanceof Date ? v.toISOString() : v
+  }
+  return out
+}
+
 // ─────────────────────────────────────────────────────────────────────
 // GET /api/sessions/[id]
 // Retorna dados da sessão + lista de atletas para o Lobby (Tela 1)
@@ -69,9 +82,13 @@ export async function GET(req, { params }) {
       .where(eq(session_athletes.session_id, id))
       .orderBy(users.name)
 
+    // Serializa datas do Drizzle para ISO string antes de enviar ao client
+    const serializedSession  = serializeRow(row)
+    const serializedAthletes = athleteRows.map(serializeRow)
+
     return NextResponse.json({
-      session:  row,
-      athletes: athleteRows,
+      session:  serializedSession,
+      athletes: serializedAthletes,
     })
   } catch (err) {
     console.error('[GET /api/sessions/id]', err)
