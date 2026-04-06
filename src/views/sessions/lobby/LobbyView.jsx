@@ -68,7 +68,10 @@ function WalkInModal({ open, onClose, sessionId, onAdded, showSnack }) {
       try {
         const res  = await fetch(`/api/athletes?search=${encodeURIComponent(query)}&limit=20`)
         const data = await res.json()
-        setResults(data.athletes ?? data ?? [])
+        // A API retorna { data: [...], total, page, ... } — lê data.data
+        // Fallbacks para compatibilidade: data.athletes (legado) ou array direto
+        const list = data.data ?? data.athletes ?? (Array.isArray(data) ? data : [])
+        setResults(list)
       } catch {
         setResults([])
       } finally {
@@ -96,7 +99,7 @@ function WalkInModal({ open, onClose, sessionId, onAdded, showSnack }) {
         athlete_id: athlete.id,
         name:       athlete.name,
         avatar_url: athlete.avatar_url ?? null,
-        hr_max:     athlete.hr_max ?? null,
+        hr_max:     athlete.hr_max ?? athlete.profile?.hr_max ?? null,
         checked_in: 1,
         sensor_id:  null,
         walk_in:    true,
@@ -148,7 +151,7 @@ function WalkInModal({ open, onClose, sessionId, onAdded, showSnack }) {
                   </ListItemAvatar>
                   <ListItemText
                     primary={athlete.name}
-                    secondary={`FC máx: ${athlete.hr_max ?? '--'} bpm`}
+                    secondary={`FC máx: ${athlete.profile?.hr_max ?? athlete.hr_max ?? '--'} bpm`}
                   />
                   {adding === athlete.id
                     ? <CircularProgress size={20} />
