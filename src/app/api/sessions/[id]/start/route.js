@@ -36,19 +36,22 @@ export async function PUT(req, { params }) {
     if (ts.status === 'active')
       return NextResponse.json({ error: 'Sessão já está ativa' }, { status: 400 })
 
-    // start_datetime = NOW() — cronômetro real do clique do professor
-    // scheduled_start já foi preenchido na criação e permanece imutável
+    // Usa valor UTC explícito do Node.js para evitar o bug de timezone do MySQL NOW()
+    // NOW() retorna hora local do servidor MySQL sem indicador de fuso → driver interpreta errado
+    const nowUtc = new Date()
+    const nowMysql = nowUtc.toISOString().slice(0, 19).replace('T', ' ') // '2026-04-06 21:13:00'
+
     await pool.query(
       `UPDATE training_sessions
-       SET status = 'active', start_datetime = NOW()
+       SET status = 'active', start_datetime = ?
        WHERE id = ?`,
-      [id]
+      [nowMysql, id]
     )
 
     return NextResponse.json({
       success: true,
       message: 'Sessão iniciada com sucesso',
-      started_at: new Date().toISOString(),
+      started_at: nowUtc.toISOString(),
     })
   } finally {
     await pool.end()
