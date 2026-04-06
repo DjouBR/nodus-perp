@@ -6,12 +6,17 @@ import { training_sessions, session_athletes } from '@/lib/db/schema/sessions'
 import { users, athlete_profiles } from '@/lib/db/schema/users'
 import { eq, and, gte } from 'drizzle-orm'
 
+/**
+ * Interpreta uma string de data/hora como horário local de Brasília (UTC-3).
+ * O input datetime-local do browser envia strings sem timezone (ex: "2026-04-06T08:00").
+ * new Date() no Node.js interpreta isso como UTC, causando offset de +3h no banco.
+ */
 function parseDatetimeLocal(str) {
   if (!str) return null
-  const [date, time] = str.split('T')
-  const [y, mo, d]  = date.split('-').map(Number)
-  const [h, mi]     = (time || '00:00').split(':').map(Number)
-  return new Date(y, mo - 1, d, h, mi, 0, 0)
+  // Se já tem offset explícito (+/-) ou Z, usa direto
+  if (/[+\-Z]/.test(str.slice(10))) return new Date(str)
+  // Sem offset: interpreta como Brasília (UTC-3)
+  return new Date(str + '-03:00')
 }
 
 // ─────────────────────────────────────────────────────────────────────
@@ -120,6 +125,8 @@ export async function PUT(req, { params }) {
         coach_id:        coach_id || session.user.id,
         start_datetime:  start,
         end_datetime:    end,
+        scheduled_start: start,
+        scheduled_end:   end,
         duration_min:    durMin,
         capacity:        capacity || 30,
         target_zone_min: target_zone_min ?? 2,
