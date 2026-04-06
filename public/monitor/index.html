@@ -6,8 +6,8 @@
 <title>NODUS — Monitor de Frequência Cardíaca</title>
 
 <link rel="stylesheet" href="https://www.w3schools.com/w3css/5/w3.css">
-<link rel="stylesheet" href="https://site-assets.fontawesome.com/releases/v7.1.0/css/all.css">
-<link defer="" media="all" onload="this.media='all'" rel="stylesheet" href="https://site-assets.fontawesome.com/releases/v7.1.0/css/duotone-light.css">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/rizmyabdulla/fontawesome-pro@main/releases/v7.2.0/css/fontawesome.css" />
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/rizmyabdulla/fontawesome-pro@main/releases/v7.2.0/css/duotone.css" />
 
 <style>
 .w3-preto-verde { color: #000 !important; background-color: #1aff15 !important }
@@ -182,13 +182,10 @@ body { padding: 0; margin: 0; }
 
 function getTokenFromUrl() {
   const parts = window.location.pathname.split('/').filter(Boolean)
-  // Espera path no formato /monitor/[token]
-  // Rejeita se o "token" for um nome de arquivo (contém ponto) ou string vazia
   if (parts.length >= 2 && parts[0] === 'monitor') {
     const candidate = parts[1]
     if (candidate && !candidate.includes('.')) return candidate
   }
-  // Fallback: query string ?token=...
   const qs = new URLSearchParams(window.location.search).get('token')
   if (qs && !qs.includes('.')) return qs
   return null
@@ -202,8 +199,6 @@ let timerInterval = null
 let sessionStartTime = null
 let countdownInterval = null
 
-// ══════════════════════════════════════════════════════════════
-// MAPA DE CORES POR ZONA
 // ══════════════════════════════════════════════════════════════
 const COLOR_MAPPING_OPACITY = {
   'w3-grey':        'rgba(97, 97, 97, 0.7)',
@@ -221,8 +216,6 @@ const ZONE_TO_COLOR_CLASS = {
   5: 'w3-red',
 }
 
-// ══════════════════════════════════════════════════════════════
-// TEMPLATES DE CARDS
 // ══════════════════════════════════════════════════════════════
 const CARD_TEMPLATES = {
   '01_01': `
@@ -734,6 +727,8 @@ function startTimer(fromMs) {
 function showSessionEnded() {
   if (timerInterval) clearInterval(timerInterval)
   if (countdownInterval) clearInterval(countdownInterval)
+  // Esconde qualquer outro overlay ativo antes de mostrar o de encerrada
+  document.getElementById('session-soon-overlay').style.display = 'none'
   const overlay = document.getElementById('session-ended-overlay')
   overlay.style.display = 'flex'
 }
@@ -760,130 +755,113 @@ function showSessionSoon(sessionName, scheduledAt) {
 }
 
 // ══════════════════════════════════════════════════════════════
-// TOKEN POLLING — verifica se token ainda é válido a cada 30s
-// ══════════════════════════════════════════════════════════════
-function startTokenPolling() {
-  if (!PAGE_TOKEN) return
-  setInterval(async () => {
-    try {
-      const r = await fetch(`/api/monitor/${PAGE_TOKEN}`)
-      if (!r.ok) showSessionEnded()
-    } catch { /* sem rede — aguarda próximo ciclo */ }
-  }, 30_000)
-}
-
-// ══════════════════════════════════════════════════════════════
 // WEBSOCKET
 // ══════════════════════════════════════════════════════════════
-function buildWsUrl() {
-  const host = window.location.hostname
-  return `ws://${host}:${ANT_PORT}/ws/heartrate`
-}
-
 let ws = null
-let reconnectTimeout = null
+let wsReconnectTimer = null
+let tokenPollInterval = null
 
 function connect() {
-  if (ws && ws.readyState === WebSocket.OPEN) return
-  ws = new WebSocket(buildWsUrl())
+  if (wsReconnectTimer) { clearTimeout(wsReconnectTimer); wsReconnectTimer = null }
+  const wsUrl = `ws://localhost:${ANT_PORT}?sessionId=${SESSION_ID}`
+  ws = new WebSocket(wsUrl)
 
   ws.onopen = () => {
-    console.log('[WS] Conectado')
     showConnected()
-    try {
-      ws.send(JSON.stringify({ type: 'request_data', sessionId: SESSION_ID }))
-    } catch(e) {}
+    console.log('[WS] Conectado ao ant-server')
   }
 
   ws.onmessage = (event) => {
     try {
       const msg = JSON.parse(event.data)
-
-      if (msg.type === 'initial_data') {
-        studentsData.clear()
-        ;(msg.data || []).forEach(d => {
-          if (d?.studentId !== undefined) studentsData.set(d.studentId, d)
-        })
-        renderAllCards()
-        if (msg.elapsedMs) startTimer(msg.elapsedMs)
-        else startTimer(0)
-        return
-      }
-
-      if (msg.type === 'heartrate') {
-        const d = msg.data
-        if (!d || d.studentId === undefined) return
-        if (d.percent === undefined || d.percent === null) {
-          d.percent = Math.round((Number(d.heartRate || 0) / (d.maxHeartRate || 200)) * 100)
-        }
-        const p = Number(d.percent || 0)
-        let zone = 1
-        if (p >= 90) zone = 5
-        else if (p >= 80) zone = 4
-        else if (p >= 70) zone = 3
-        else if (p >= 60) zone = 2
-        d.zone = zone
-
-        studentsData.set(d.studentId, d)
-        if (!document.getElementById(`card-${d.studentId}`)) renderAllCards()
-        else updateCard(d.studentId, d)
-        return
-      }
-
-      if (msg.type === 'session_ended') {
-        showSessionEnded()
-        return
-      }
-
-      if (msg.type === 'reset_all') {
-        studentsData.clear()
-        ;(msg.data || []).forEach(d => {
-          if (d?.studentId !== undefined) studentsData.set(d.studentId, d)
-        })
-        renderAllCards()
-        return
-      }
-
-      if (msg.type === 'remove') {
-        if (msg.studentId !== undefined && studentsData.has(msg.studentId)) {
-          studentsData.delete(msg.studentId)
-          renderAllCards()
-        }
-      }
-    } catch(err) {
-      console.error('[WS] Erro ao processar mensagem', err)
+      handleWsMessage(msg)
+    } catch(e) {
+      console.warn('[WS] Mensagem inválida:', e)
     }
   }
 
   ws.onclose = () => {
-    console.log('[WS] Desconectado')
     showDisconnected()
-    if (reconnectTimeout) clearTimeout(reconnectTimeout)
-    reconnectTimeout = setTimeout(connect, 3000)
+    console.log('[WS] Desconectado — tentando reconectar em 5s…')
+    wsReconnectTimer = setTimeout(connect, 5000)
   }
 
   ws.onerror = (err) => {
-    console.error('[WS] Erro', err)
-    showDisconnected()
+    console.warn('[WS] Erro:', err)
+    ws.close()
   }
 }
 
-setInterval(() => {
-  if (ws && ws.readyState === WebSocket.OPEN) {
-    try { ws.send(JSON.stringify({ type: 'ping' })) } catch(e) {}
+function handleWsMessage(msg) {
+  switch (msg.type) {
+    case 'init': {
+      // Recebe lista inicial de atletas
+      studentsData.clear()
+      if (Array.isArray(msg.athletes)) {
+        msg.athletes.forEach(a => studentsData.set(String(a.studentId), a))
+      }
+      renderAllCards()
+      if (msg.startedAt) startTimer(Date.now() - new Date(msg.startedAt).getTime())
+      break
+    }
+    case 'hr_update': {
+      const id = String(msg.studentId)
+      if (studentsData.has(id)) {
+        studentsData.set(id, { ...studentsData.get(id), ...msg })
+        updateCard(id, studentsData.get(id))
+      }
+      break
+    }
+    case 'athlete_joined': {
+      studentsData.set(String(msg.studentId), msg)
+      renderAllCards()
+      break
+    }
+    case 'athlete_left': {
+      studentsData.delete(String(msg.studentId))
+      renderAllCards()
+      break
+    }
+    case 'session_ended': {
+      // WS sinalizou encerramento — confirma via API antes de mostrar overlay
+      // para evitar falso positivo quando a sessão ainda está ativa
+      fetch(`/api/monitor/${PAGE_TOKEN}`)
+        .then(r => r.json())
+        .then(j => {
+          if (!j.ok || j.sessionStatus === 'finished' || j.sessionStatus === 'cancelled') {
+            showSessionEnded()
+          }
+        })
+        .catch(() => showSessionEnded())
+      break
+    }
+    default:
+      console.log('[WS] Mensagem desconhecida:', msg.type)
   }
-}, 30_000)
-
-window.addEventListener('resize', () => {
-  if (studentsData.size > 0) renderAllCards()
-})
+}
 
 // ══════════════════════════════════════════════════════════════
-// BOOT — valida token → obtém sessionId → conecta WS
+// TOKEN POLLING — verifica a cada 60s se a sessão ainda está ativa
+// ══════════════════════════════════════════════════════════════
+function startTokenPolling() {
+  if (tokenPollInterval) clearInterval(tokenPollInterval)
+  tokenPollInterval = setInterval(async () => {
+    try {
+      const r = await fetch(`/api/monitor/${PAGE_TOKEN}`)
+      const j = await r.json()
+      if (!r.ok || !j.ok || j.sessionStatus === 'finished' || j.sessionStatus === 'cancelled') {
+        clearInterval(tokenPollInterval)
+        showSessionEnded()
+      }
+    } catch { /* rede indisponível — ignora */ }
+  }, 60_000)
+}
+
+// ══════════════════════════════════════════════════════════════
+// BOOT
 // ══════════════════════════════════════════════════════════════
 async function boot() {
   if (!PAGE_TOKEN) {
-    // Token ausente ou inválido (ex: acessou /monitor/index.html diretamente)
     document.getElementById('sessionNameHeader').textContent = 'TOKEN INVÁLIDO'
     showDisconnected()
     return
@@ -893,6 +871,7 @@ async function boot() {
     const res  = await fetch(`/api/monitor/${PAGE_TOKEN}`)
     const json = await res.json()
 
+    // Token inválido, expirado ou sessão cancelada/encerrada
     if (!res.ok || !json.ok) {
       showSessionEnded()
       return
@@ -905,11 +884,10 @@ async function boot() {
     document.getElementById('sessionNameHeader').textContent = SESSION_NAME
     document.title = `NODUS — ${SESSION_NAME}`
 
-    // Verifica status antes de conectar ao WebSocket
-    const status = json.sessionStatus
-    if (status === 'scheduled' || status === 'pending') {
+    // Sessão agendada/pendente — mostra countdown e não conecta no WS
+    if (json.sessionStatus === 'scheduled' || json.sessionStatus === 'pending') {
       showSessionSoon(SESSION_NAME, json.scheduledAt)
-      // Polling a cada 30s para detectar início da sessão
+      // Verifica a cada 30s se a sessão foi iniciada
       setInterval(async () => {
         try {
           const r = await fetch(`/api/monitor/${PAGE_TOKEN}`)
@@ -920,11 +898,13 @@ async function boot() {
       return
     }
 
-    if (status === 'ended' || status === 'cancelled' || status === 'finished') {
+    // Sessão já encerrada ou cancelada
+    if (json.sessionStatus === 'finished' || json.sessionStatus === 'cancelled') {
       showSessionEnded()
       return
     }
 
+    // Sessão ativa — conecta no WS
     connect()
     startTokenPolling()
   } catch(err) {
@@ -933,7 +913,7 @@ async function boot() {
   }
 }
 
-boot()
+window.addEventListener('load', boot)
 </script>
 </body>
 </html>
