@@ -13,7 +13,7 @@
  * O monitor.html usa esses dados para:
  *   1. Montar a URL do WebSocket filtrando apenas atletas da sessão
  *   2. Exibir o nome da sessão no header
- *   3. Bloquear exibição se o token estiver revogado ou expirado
+ *   3. Bloquear exibição se o token estiver revogado
  *   4. Exibir countdown se a sessão ainda não iniciou (status scheduled/pending)
  */
 
@@ -30,8 +30,8 @@ export async function GET(req, { params }) {
   }
 
   try {
-    // 1. Busca o token
-    const [row] = await db
+    // 1. Busca o token ativo (não revogado e dentro do prazo)
+    let [row] = await db
       .select()
       .from(session_monitor_tokens)
       .where(
@@ -42,6 +42,34 @@ export async function GET(req, { params }) {
         )
       )
       .limit(1)
+
+    // 1b. Se não encontrou pelo prazo, tenta sem filtro de expiry
+    //     para detectar sessões scheduled/pending com token ainda válido
+    if (!row) {
+      const [rowNoExpiry] = await db
+        .select()
+        .from(session_monitor_tokens)
+        .where(
+          and(
+            eq(session_monitor_tokens.token, token),
+            eq(session_monitor_tokens.revoked, 0),
+          )
+        )
+        .limit(1)
+
+      if (rowNoExpiry) {
+        // Só permite se a sessão for scheduled ou pending
+        const [checkSession] = await db
+          .select({ status: training_sessions.status })
+          .from(training_sessions)
+          .where(eq(training_sessions.id, rowNoExpiry.session_id))
+          .limit(1)
+
+        if (checkSession && (checkSession.status === 'scheduled' || checkSession.status === 'pending')) {
+          row = rowNoExpiry
+        }
+      }
+    }
 
     if (!row) {
       return NextResponse.json(
@@ -74,9 +102,9 @@ export async function GET(req, { params }) {
       sessionId:     session.id,
       sessionName:   session.name,
       sessionStatus: session.status,
-      scheduledAt:   session.scheduled_at,   // usado pelo overlay "Sessão em Breve"
+      scheduledAt:   session.scheduled_at,
       tenantId:      row.tenant_id,
-      antServerPort,                          // usado pelo monitor.html para montar ws://[host]:[port]/ws/heartrate
+      antServerPort,
     })
   } catch (err) {
     console.error('[GET /api/monitor/token] Error:', err)
