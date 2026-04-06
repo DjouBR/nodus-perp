@@ -182,8 +182,16 @@ body { padding: 0; margin: 0; }
 
 function getTokenFromUrl() {
   const parts = window.location.pathname.split('/').filter(Boolean)
-  if (parts.length >= 2 && parts[0] === 'monitor') return parts[1]
-  return new URLSearchParams(window.location.search).get('token')
+  // Espera path no formato /monitor/[token]
+  // Rejeita se o "token" for um nome de arquivo (contém ponto) ou string vazia
+  if (parts.length >= 2 && parts[0] === 'monitor') {
+    const candidate = parts[1]
+    if (candidate && !candidate.includes('.')) return candidate
+  }
+  // Fallback: query string ?token=...
+  const qs = new URLSearchParams(window.location.search).get('token')
+  if (qs && !qs.includes('.')) return qs
+  return null
 }
 
 const PAGE_TOKEN = getTokenFromUrl()
@@ -875,6 +883,7 @@ window.addEventListener('resize', () => {
 // ══════════════════════════════════════════════════════════════
 async function boot() {
   if (!PAGE_TOKEN) {
+    // Token ausente ou inválido (ex: acessou /monitor/index.html diretamente)
     document.getElementById('sessionNameHeader').textContent = 'TOKEN INVÁLIDO'
     showDisconnected()
     return
