@@ -20,14 +20,31 @@ function parseDatetimeLocal(str) {
 }
 
 /**
- * Serializa um objeto do Drizzle convertendo todos os campos Date para ISO string.
- * Necessário para evitar o erro RSC: "Only plain objects can be passed to Client Components".
+ * Serializa um objeto do Drizzle para JSON puro, cobrindo todos os tipos
+ * que o Next.js RSC não consegue serializar na fronteira Server → Client:
+ *   - Date        → ISO string
+ *   - BigInt      → Number  (IDs numéricos grandes do MySQL)
+ *   - Objeto com prototype não-padrão (Decimal, Buffer, etc.) → null
  */
 function serializeRow(row) {
   if (!row || typeof row !== 'object') return row
   const out = {}
   for (const [k, v] of Object.entries(row)) {
-    out[k] = v instanceof Date ? v.toISOString() : v
+    if (v instanceof Date) {
+      out[k] = v.toISOString()
+    } else if (typeof v === 'bigint') {
+      out[k] = Number(v)
+    } else if (
+      v !== null &&
+      typeof v === 'object' &&
+      !Array.isArray(v) &&
+      Object.getPrototypeOf(v) !== Object.prototype
+    ) {
+      // Decimal, Buffer ou qualquer classe não-plain → converte para string ou null
+      out[k] = v.toString ? v.toString() : null
+    } else {
+      out[k] = v
+    }
   }
   return out
 }
@@ -82,7 +99,7 @@ export async function GET(req, { params }) {
       .where(eq(session_athletes.session_id, id))
       .orderBy(users.name)
 
-    // Serializa datas do Drizzle para ISO string antes de enviar ao client
+    // Serializa para JSON puro antes de retornar (Date, BigInt, Decimal, etc.)
     const serializedSession  = serializeRow(row)
     const serializedAthletes = athleteRows.map(serializeRow)
 
