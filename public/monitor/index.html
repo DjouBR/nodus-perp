@@ -199,6 +199,11 @@ let timerInterval = null
 let sessionStartTime = null
 let countdownInterval = null
 
+// Flag: garante que o polling de "sessão em breve" só seja criado uma vez
+let soonPollingStarted = false
+// Flag: bloqueia startTokenPolling() enquanto overlay "em breve" estiver ativo
+let sessionSoonActive = false
+
 // ══════════════════════════════════════════════════════════════
 const COLOR_MAPPING_OPACITY = {
   'w3-grey':        'rgba(97, 97, 97, 0.7)',
@@ -590,275 +595,138 @@ function calcularTamanhoDiv(n) {
   const larguraDiv = (larguraTotalDisponivel - (colunas + 1) * gap) / colunas
   const alturaDiv  = (alturaTotalDisponivel - ((linhas + 1) * gap) - alturaCabecalho) / linhas
 
-  return {
-    largura:     Math.max(120, larguraDiv),
-    altura:      Math.max(100, alturaDiv),
-    margin:      gap,
-    templateKey: config.templateKey,
-  }
+  return { larguraDiv, alturaDiv, config }
 }
 
-// ══════════════════════════════════════════════════════════════
-// STATE
-// ══════════════════════════════════════════════════════════════
-const gridContainer = document.getElementById('gridContainer')
-const studentsData  = new Map()
-
-// ══════════════════════════════════════════════════════════════
-// HEADER — conexão
-// ══════════════════════════════════════════════════════════════
-function showConnected() {
-  document.getElementById('disconnectedTemplate').style.display = 'none'
-  document.getElementById('connectedTemplate').style.display = ''
-}
+// ── Helpers de UI ──────────────────────────────────────────────
 function showDisconnected() {
-  document.getElementById('connectedTemplate').style.display = 'none'
-  document.getElementById('disconnectedTemplate').style.display = ''
+  if (sessionSoonActive) return
+  document.getElementById('connectedTemplate').style.display    = 'none'
+  document.getElementById('disconnectedTemplate').style.display = 'flex'
 }
-
-// ══════════════════════════════════════════════════════════════
-// CARDS
-// ══════════════════════════════════════════════════════════════
-function createCardFromTemplate(templateKey, data, size, studentId, totalCards) {
-  const wrapper = document.createElement('div')
-  wrapper.className = 'card-wrapper w3-card'
-  wrapper.style.width   = Math.floor(size.largura) + 'px'
-  wrapper.style.height  = Math.floor(size.altura) + 'px'
-  wrapper.style.marginLeft = size.margin + 'px'
-  wrapper.style.marginTop  = size.margin + 'px'
-  wrapper.id = `card-${studentId}`
-  wrapper.dataset.hasChart = '1'
-
-  if ([3,4,7,8,9].includes(totalCards)) wrapper.style.lineHeight = '1.2'
-
-  const zone      = Number(data.zone) || 1
-  const colorClass = ZONE_TO_COLOR_CLASS[zone] || 'w3-grey'
-  wrapper.style.backgroundColor = COLOR_MAPPING_OPACITY[colorClass]
-
-  const temp = document.createElement('div')
-  temp.innerHTML = CARD_TEMPLATES[templateKey].trim()
-  Array.from(temp.childNodes).forEach(n => wrapper.appendChild(n.cloneNode(true)))
-
-  const svg = wrapper.querySelector('#chart-green')
-  if (svg) svg.id = `chart-${studentId}`
-  const txt = wrapper.querySelector('#text-green')
-  if (txt) txt.id = `percent-${studentId}`
-  const cnt = wrapper.querySelector('#chart-container-green')
-  if (cnt) cnt.id = `container-${studentId}`
-
-  const fill = (sel, val) => { const el = wrapper.querySelector(sel); if (el) el.textContent = val ?? '' }
-  fill('[data-name]',     data.studentName || `ID ${studentId}`)
-  fill('[data-calories]', Math.round(data.calories ?? 0))
-  fill('[data-calories2]',Math.round(data.calories ?? 0))
-  fill('[data-hr]',       data.heartRate ?? '--')
-  fill('[data-points]',   Math.round(data.points ?? 0))
-  const pct = data.percent ?? Math.round((Number(data.heartRate || 0) / (data.maxHeartRate || 200)) * 100)
-  fill('[data-percent]',  pct)
-
-  return wrapper
+function showConnected() {
+  document.getElementById('connectedTemplate').style.display    = 'flex'
+  document.getElementById('disconnectedTemplate').style.display = 'none'
 }
-
-function renderAllCards() {
-  Array.from(gridContainer.children).forEach(c => { if (c.id !== 'mainHeader') c.remove() })
-  const n = studentsData.size
-  if (n === 0) return
-  const size = calcularTamanhoDiv(n)
-  for (const [studentId, data] of studentsData.entries()) {
-    gridContainer.appendChild(createCardFromTemplate(size.templateKey, data, size, studentId, n))
-  }
-}
-
-function applyZoneColor(card, zone) {
-  const colorClass = ZONE_TO_COLOR_CLASS[zone] || 'w3-grey'
-  card.style.backgroundColor = COLOR_MAPPING_OPACITY[colorClass]
-}
-
-function updateChart(card, percent, zone) {
-  if (card.dataset.hasChart !== '1') return
-  const studentId     = card.id.replace('card-', '')
-  const svgChart      = card.querySelector(`#chart-${studentId}`)
-  const text          = card.querySelector(`#percent-${studentId}`)
-  if (!svgChart || !text) return
-  const circleProgress = svgChart.querySelector('.circle-progress')
-  const circleBorder   = svgChart.querySelector('.circle')
-  if (!circleProgress) return
-  const colorClass = ZONE_TO_COLOR_CLASS[zone] || 'w3-grey'
-  const rgba       = COLOR_MAPPING_OPACITY[colorClass] || COLOR_MAPPING_OPACITY['w3-grey']
-  circleProgress.style.strokeDasharray = `${percent}, 100`
-  if (circleBorder) circleBorder.style.strokeDasharray = `${percent}, 100`
-  circleProgress.style.stroke = rgba.replace('0.7', '1.0')
-  text.textContent = percent
-}
-
-function updateCard(studentId, data) {
-  const card = document.getElementById(`card-${studentId}`)
-  if (!card) return
-  const fill = (sel, val) => { const el = card.querySelector(sel); if (el) el.textContent = val }
-  fill('[data-hr]',       data.heartRate ?? '--')
-  fill('[data-calories]', Math.round(data.calories ?? 0))
-  fill('[data-calories2]',Math.round(data.calories ?? 0))
-  fill('[data-points]',   Math.round(data.points   ?? 0))
-  const percent = Number(data.percent ?? 0)
-  fill('[data-percent]',  percent)
-  const zone = Number(data.zone ?? 1)
-  applyZoneColor(card, zone)
-  updateChart(card, percent, zone)
-}
-
-// ══════════════════════════════════════════════════════════════
-// CRONÔMETRO
-// ══════════════════════════════════════════════════════════════
-function startTimer(fromMs) {
-  sessionStartTime = Date.now() - (fromMs || 0)
-  if (timerInterval) clearInterval(timerInterval)
-  timerInterval = setInterval(() => {
-    const elapsed  = Math.floor((Date.now() - sessionStartTime) / 1000)
-    const h = Math.floor(elapsed / 3600)
-    const m = Math.floor((elapsed % 3600) / 60)
-    const s = elapsed % 60
-    document.getElementById('sessionTimer').textContent =
-      `${String(h).padStart(2,'0')}:${String(m).padStart(2,'0')}:${String(s).padStart(2,'0')}`
-  }, 1000)
-}
-
-// ══════════════════════════════════════════════════════════════
-// OVERLAYS
-// ══════════════════════════════════════════════════════════════
 function showSessionEnded() {
-  if (timerInterval) clearInterval(timerInterval)
-  if (countdownInterval) clearInterval(countdownInterval)
-  // Esconde qualquer outro overlay ativo antes de mostrar o de encerrada
-  document.getElementById('session-soon-overlay').style.display = 'none'
-  const overlay = document.getElementById('session-ended-overlay')
-  overlay.style.display = 'flex'
+  if (sessionSoonActive) return
+  const el = document.getElementById('session-ended-overlay')
+  el.style.display = 'flex'
 }
 
-function showSessionSoon(sessionName, scheduledAt) {
+// ── Normaliza data para ISO 8601 com fuso UTC ──────────────────
+// Garante que strings do MySQL ("2026-04-07 21:00:00") sejam
+// interpretadas corretamente em todos os browsers, incluindo Chromium/TV
+function parseScheduledAt(raw) {
+  if (!raw) return null
+  // Se já tem 'T' e termina com 'Z' ou offset (+/-), está ok
+  if (/T.*[Z+\-]\d*$/.test(raw)) return new Date(raw)
+  // Troca espaço por 'T' e adiciona 'Z' para forçar interpretação UTC
+  const iso = String(raw).replace(' ', 'T').replace(/(\.\d+)?$/, 'Z')
+  const d = new Date(iso)
+  return isNaN(d.getTime()) ? null : d
+}
+
+// ── Countdown para sessão em breve ─────────────────────────────
+function showSessionSoon(sessionName, scheduledAtRaw) {
+  sessionSoonActive = true
   document.getElementById('soon-session-name').textContent = sessionName
+
   const overlay = document.getElementById('session-soon-overlay')
   overlay.style.display = 'flex'
 
+  const target = parseScheduledAt(scheduledAtRaw)
+
+  // Cancela qualquer countdown anterior antes de criar novo
+  if (countdownInterval) {
+    clearInterval(countdownInterval)
+    countdownInterval = null
+  }
+
   function tick() {
-    const diff = Math.max(0, Math.floor((new Date(scheduledAt) - Date.now()) / 1000))
+    let diff = 0
+    if (target && !isNaN(target.getTime())) {
+      diff = Math.max(0, Math.floor((target.getTime() - Date.now()) / 1000))
+    }
     const h = Math.floor(diff / 3600)
     const m = Math.floor((diff % 3600) / 60)
     const s = diff % 60
     document.getElementById('soon-countdown').textContent =
       `${String(h).padStart(2,'0')}:${String(m).padStart(2,'0')}:${String(s).padStart(2,'0')}`
-    if (diff === 0) {
+
+    if (target && diff === 0) {
       clearInterval(countdownInterval)
+      countdownInterval = null
       setTimeout(() => window.location.reload(), 2000)
     }
   }
+
   tick()
   countdownInterval = setInterval(tick, 1000)
+
+  // Polling de 30s para detectar início da sessão — criado apenas uma vez
+  if (!soonPollingStarted) {
+    soonPollingStarted = true
+    setInterval(async () => {
+      try {
+        const r = await fetch(`/api/monitor/${PAGE_TOKEN}`)
+        const j = await r.json()
+        if (j.ok && j.sessionStatus === 'active') window.location.reload()
+      } catch {}
+    }, 30_000)
+  }
 }
 
 // ══════════════════════════════════════════════════════════════
-// WEBSOCKET
+// WebSocket + Token Polling
 // ══════════════════════════════════════════════════════════════
 let ws = null
-let wsReconnectTimer = null
-let tokenPollInterval = null
 
 function connect() {
-  if (wsReconnectTimer) { clearTimeout(wsReconnectTimer); wsReconnectTimer = null }
-  const wsUrl = `ws://localhost:${ANT_PORT}?sessionId=${SESSION_ID}`
+  const wsUrl = `ws://${window.location.hostname}:${ANT_PORT}?sessionId=${SESSION_ID}`
   ws = new WebSocket(wsUrl)
 
   ws.onopen = () => {
+    console.log('[WS] Conectado')
     showConnected()
-    console.log('[WS] Conectado ao ant-server')
   }
 
   ws.onmessage = (event) => {
     try {
-      const msg = JSON.parse(event.data)
-      handleWsMessage(msg)
-    } catch(e) {
-      console.warn('[WS] Mensagem inválida:', e)
+      const data = JSON.parse(event.data)
+      handleWsMessage(data)
+    } catch (e) {
+      console.error('[WS] Erro ao parsear mensagem:', e)
     }
   }
 
   ws.onclose = () => {
+    console.warn('[WS] Desconectado')
     showDisconnected()
-    console.log('[WS] Desconectado — tentando reconectar em 5s…')
-    wsReconnectTimer = setTimeout(connect, 5000)
+    setTimeout(connect, 3000)
   }
 
   ws.onerror = (err) => {
-    console.warn('[WS] Erro:', err)
-    ws.close()
+    console.error('[WS] Erro:', err)
   }
 }
 
-function handleWsMessage(msg) {
-  switch (msg.type) {
-    case 'init': {
-      // Recebe lista inicial de atletas
-      studentsData.clear()
-      if (Array.isArray(msg.athletes)) {
-        msg.athletes.forEach(a => studentsData.set(String(a.studentId), a))
-      }
-      renderAllCards()
-      if (msg.startedAt) startTimer(Date.now() - new Date(msg.startedAt).getTime())
-      break
-    }
-    case 'hr_update': {
-      const id = String(msg.studentId)
-      if (studentsData.has(id)) {
-        studentsData.set(id, { ...studentsData.get(id), ...msg })
-        updateCard(id, studentsData.get(id))
-      }
-      break
-    }
-    case 'athlete_joined': {
-      studentsData.set(String(msg.studentId), msg)
-      renderAllCards()
-      break
-    }
-    case 'athlete_left': {
-      studentsData.delete(String(msg.studentId))
-      renderAllCards()
-      break
-    }
-    case 'session_ended': {
-      // WS sinalizou encerramento — confirma via API antes de mostrar overlay
-      // para evitar falso positivo quando a sessão ainda está ativa
-      fetch(`/api/monitor/${PAGE_TOKEN}`)
-        .then(r => r.json())
-        .then(j => {
-          if (!j.ok || j.sessionStatus === 'finished' || j.sessionStatus === 'cancelled') {
-            showSessionEnded()
-          }
-        })
-        .catch(() => showSessionEnded())
-      break
-    }
-    default:
-      console.log('[WS] Mensagem desconhecida:', msg.type)
-  }
-}
-
-// ══════════════════════════════════════════════════════════════
-// TOKEN POLLING — verifica a cada 60s se a sessão ainda está ativa
-// ══════════════════════════════════════════════════════════════
 function startTokenPolling() {
-  if (tokenPollInterval) clearInterval(tokenPollInterval)
-  tokenPollInterval = setInterval(async () => {
+  // Não inicia polling de token enquanto "em breve" estiver ativo
+  if (sessionSoonActive) return
+
+  setInterval(async () => {
+    if (sessionSoonActive) return
     try {
-      const r = await fetch(`/api/monitor/${PAGE_TOKEN}`)
-      const j = await r.json()
-      if (!r.ok || !j.ok || j.sessionStatus === 'finished' || j.sessionStatus === 'cancelled') {
-        clearInterval(tokenPollInterval)
-        showSessionEnded()
-      }
-    } catch { /* rede indisponível — ignora */ }
+      const res  = await fetch(`/api/monitor/${PAGE_TOKEN}`)
+      const json = await res.json()
+      if (!res.ok || !json.ok) showSessionEnded()
+    } catch {}
   }, 60_000)
 }
 
 // ══════════════════════════════════════════════════════════════
-// BOOT
+// Boot
 // ══════════════════════════════════════════════════════════════
 async function boot() {
   if (!PAGE_TOKEN) {
@@ -871,7 +739,6 @@ async function boot() {
     const res  = await fetch(`/api/monitor/${PAGE_TOKEN}`)
     const json = await res.json()
 
-    // Token inválido, expirado ou sessão cancelada/encerrada
     if (!res.ok || !json.ok) {
       showSessionEnded()
       return
@@ -884,27 +751,17 @@ async function boot() {
     document.getElementById('sessionNameHeader').textContent = SESSION_NAME
     document.title = `NODUS — ${SESSION_NAME}`
 
-    // Sessão agendada/pendente — mostra countdown e não conecta no WS
+    // Verifica status antes de conectar ao WS
     if (json.sessionStatus === 'scheduled' || json.sessionStatus === 'pending') {
       showSessionSoon(SESSION_NAME, json.scheduledAt)
-      // Verifica a cada 30s se a sessão foi iniciada
-      setInterval(async () => {
-        try {
-          const r = await fetch(`/api/monitor/${PAGE_TOKEN}`)
-          const j = await r.json()
-          if (j.ok && j.sessionStatus === 'active') window.location.reload()
-        } catch {}
-      }, 30_000)
       return
     }
 
-    // Sessão já encerrada ou cancelada
-    if (json.sessionStatus === 'finished' || json.sessionStatus === 'cancelled') {
+    if (json.sessionStatus === 'ended' || json.sessionStatus === 'cancelled') {
       showSessionEnded()
       return
     }
 
-    // Sessão ativa — conecta no WS
     connect()
     startTokenPolling()
   } catch(err) {
@@ -913,7 +770,108 @@ async function boot() {
   }
 }
 
-window.addEventListener('load', boot)
+// ══════════════════════════════════════════════════════════════
+// Handlers de mensagens WS
+// ══════════════════════════════════════════════════════════════
+let athleteData = {}
+let gridBuilt = false
+
+function handleWsMessage(data) {
+  if (data.type === 'session_ended') { showSessionEnded(); return }
+  if (data.type === 'athletes_snapshot') { handleSnapshot(data.athletes); return }
+  if (data.type === 'athlete_update')    { handleAthleteUpdate(data); return }
+}
+
+function handleSnapshot(athletes) {
+  athleteData = {}
+  athletes.forEach(a => { athleteData[a.deviceId] = a })
+  buildGrid(athletes)
+}
+
+function handleAthleteUpdate(data) {
+  if (!athleteData[data.deviceId]) return
+  Object.assign(athleteData[data.deviceId], data)
+  updateCard(data.deviceId, data)
+}
+
+// ══════════════════════════════════════════════════════════════
+// Grid e Cards
+// ══════════════════════════════════════════════════════════════
+function buildGrid(athletes) {
+  const n = athletes.length
+  if (n === 0) return
+
+  const { larguraDiv, alturaDiv, config } = calcularTamanhoDiv(n)
+  const { gap, templateKey } = config
+  const container = document.getElementById('gridContainer')
+
+  // Remove cards anteriores (mantém o header)
+  const header = document.getElementById('mainHeader')
+  container.innerHTML = ''
+  container.appendChild(header)
+
+  container.style.gap     = `${gap}px`
+  container.style.padding = `${gap}px`
+  container.style.alignContent = 'flex-start'
+
+  athletes.forEach(athlete => {
+    const wrapper = document.createElement('div')
+    wrapper.className = 'card-wrapper w3-card w3-round-large'
+    wrapper.id        = `card-${athlete.deviceId}`
+    wrapper.style.width  = `${larguraDiv}px`
+    wrapper.style.height = `${alturaDiv}px`
+    wrapper.style.overflow = 'hidden'
+    wrapper.innerHTML = CARD_TEMPLATES[templateKey] || CARD_TEMPLATES['21_42']
+
+    wrapper.querySelector('[data-name]').textContent     = athlete.name     || '—'
+    wrapper.querySelector('[data-hr]').textContent       = athlete.hr       || '—'
+    wrapper.querySelector('[data-calories]').textContent = athlete.calories || '0'
+    wrapper.querySelector('[data-calories2]').textContent = athlete.calories || '0'
+    wrapper.querySelector('[data-points]').textContent   = athlete.points   || '0'
+
+    container.appendChild(wrapper)
+  })
+
+  gridBuilt = true
+}
+
+function updateCard(deviceId, data) {
+  const card = document.getElementById(`card-${deviceId}`)
+  if (!card) return
+
+  if (data.hr       !== undefined) { const el = card.querySelector('[data-hr]');       if (el) el.textContent = data.hr }
+  if (data.calories !== undefined) {
+    const c1 = card.querySelector('[data-calories]');  if (c1) c1.textContent = data.calories
+    const c2 = card.querySelector('[data-calories2]'); if (c2) c2.textContent = data.calories
+  }
+  if (data.points   !== undefined) { const el = card.querySelector('[data-points]');   if (el) el.textContent = data.points }
+  if (data.percent  !== undefined) { const el = card.querySelector('[data-percent]');  if (el) el.textContent = data.percent }
+
+  if (data.zone !== undefined) {
+    const colorClass = ZONE_TO_COLOR_CLASS[data.zone] || 'w3-grey'
+    card.className = card.className.replace(/w3-(grey|light-green|cyan|yellow|orange|red)/g, '').trim()
+    card.classList.add(colorClass)
+  }
+}
+
+// ══════════════════════════════════════════════════════════════
+// Timer de sessão
+// ══════════════════════════════════════════════════════════════
+function startSessionTimer(startedAt) {
+  sessionStartTime = startedAt ? new Date(startedAt) : new Date()
+  if (timerInterval) clearInterval(timerInterval)
+  timerInterval = setInterval(() => {
+    const elapsed = Math.floor((Date.now() - sessionStartTime.getTime()) / 1000)
+    const h = Math.floor(elapsed / 3600)
+    const m = Math.floor((elapsed % 3600) / 60)
+    const s = elapsed % 60
+    document.getElementById('sessionTimer').textContent =
+      `${String(h).padStart(2,'0')}:${String(m).padStart(2,'0')}:${String(s).padStart(2,'0')}`
+  }, 1000)
+}
+
+// ══════════════════════════════════════════════════════════════
+boot()
 </script>
 </body>
 </html>
