@@ -8,17 +8,17 @@
  * Fluxo:
  *   1. Carrega dados da sessão + lista de atletas (GET /api/sessions/[id])
  *   2. Gera o token de monitor (POST /api/sessions/[id]/token) para obter o link da Tela 2
- *   3. Staff confirma presenças e atribui sensores ANT+
+ *   3. Staff confirma presenças e vincula o sensor ANT+ digitando o ID do frequencímetro
+ *      (PUT /api/sessions/[id]/assign-sensor — valida se o ID já está em uso)
  *   4. Clica em "Iniciar Sessão" → PUT /api/sessions/[id]/start
  *   5. Botões abrem Tela 2 (monitor atletas) e Tela 3 (monitor treinador) em nova aba
  */
 
 import { useState, useEffect, useCallback } from 'react'
 import {
-  Card, CardContent, CardHeader,
+  Card, CardContent,
   Button, Chip, CircularProgress,
   Avatar, Tooltip, IconButton,
-  MenuItem, Select, FormControl,
   Divider, Typography, Box, Alert,
   Snackbar, Dialog, DialogTitle,
   DialogContent, DialogActions,
@@ -29,26 +29,8 @@ import {
 import Grid from '@mui/material/Grid'
 
 // ──────────────────────────────────────────────────
-// ICONES (inline para não depender de import de lib específica)
 const Icon = ({ icon, ...p }) => <i className={`tabler-${icon}`} {...p} />
 // ──────────────────────────────────────────────────
-
-// Simula lista de sensores ANT+ disponíveis — substituir pela listagem real do ant-server
-const useSensors = () => {
-  const [sensors, setSensors] = useState([])
-  useEffect(() => {
-    // TODO: GET http://localhost:3001/sensors quando o ant-server expuser essa rota
-    // Por ora: lista estática para desenvolvimento
-    setSensors([
-      { id: 'ANT001', label: 'Sensor ANT+ 001' },
-      { id: 'ANT002', label: 'Sensor ANT+ 002' },
-      { id: 'ANT003', label: 'Sensor ANT+ 003' },
-      { id: 'ANT004', label: 'Sensor ANT+ 004' },
-      { id: 'ANT005', label: 'Sensor ANT+ 005' },
-    ])
-  }, [])
-  return sensors
-}
 
 // ──────────────────────────────────────────────────
 // MODAL DE WALK-IN
@@ -96,13 +78,14 @@ function WalkInModal({ open, onClose, sessionId, onAdded, showSnack }) {
       }
       // Monta o objeto no mesmo formato que a lista de atletas usa
       onAdded({
-        athlete_id: athlete.id,
-        name:       athlete.name,
-        avatar_url: athlete.avatar_url ?? null,
-        hr_max:     athlete.hr_max ?? athlete.profile?.hr_max ?? null,
-        checked_in: 1,
-        sensor_id:  null,
-        walk_in:    true,
+        athlete_id:    athlete.id,
+        name:          athlete.name,
+        avatar_url:    athlete.avatar_url ?? null,
+        hr_max:        athlete.hr_max ?? athlete.profile?.hr_max ?? null,
+        checked_in:    1,
+        sensor_id:     null,
+        sensor_serial: null,
+        walk_in:       true,
       })
       showSnack(`${athlete.name} adicionado como walk-in ✓`, 'success')
       onClose()
@@ -186,8 +169,10 @@ function WalkInModal({ open, onClose, sessionId, onAdded, showSnack }) {
 // ──────────────────────────────────────────────────
 // CARD DE ATLETA
 // ──────────────────────────────────────────────────
-function AthleteCard({ athlete, sensors, sessionId, onUpdate }) {
-  const [loading, setLoading] = useState(false)
+function AthleteCard({ athlete, sessionId, onUpdate, showSnack }) {
+  const [loading,      setLoading]      = useState(false)
+  const [serialInput,  setSerialInput]  = useState('')
+  const [bindingSens,  setBindingSens]  = useState(false)
 
   const handleCheckin = async () => {
     setLoading(true)
@@ -204,17 +189,42 @@ function AthleteCard({ athlete, sensors, sessionId, onUpdate }) {
     }
   }
 
-  const handleSensor = async (sensorId) => {
+  // Vincula (serial preenchido) ou desvincula (serial = null) o sensor
+  const handleSensor = async (serial) => {
+    setBindingSens(true)
     try {
-      await fetch(`/api/sessions/${sessionId}/assign-sensor`, {
+      const res = await fetch(`/api/sessions/${sessionId}/assign-sensor`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ athleteId: athlete.athlete_id, sensorId }),
+        body: JSON.stringify({ athleteId: athlete.athlete_id, serial }),
       })
-      onUpdate(athlete.athlete_id, { sensor_id: sensorId })
-    } catch (err) {
-      console.error('Erro ao atribuir sensor', err)
+      const data = await res.json()
+      if (!res.ok) {
+        showSnack(data.error ?? 'Erro ao vincular sensor', 'error')
+        return
+      }
+      onUpdate(athlete.athlete_id, {
+        sensor_id:     data.sensor_id ?? null,
+        sensor_serial: data.sensor_serial ?? null,
+      })
+      setSerialInput('')
+      showSnack(
+        data.sensor_serial
+          ? `Sensor ${data.sensor_serial} vinculado a ${athlete.name}${data.created ? ' (novo sensor cadastrado)' : ''}`
+          : `Sensor removido de ${athlete.name}`,
+        'success'
+      )
+    } catch {
+      showSnack('Erro de rede ao vincular sensor', 'error')
+    } finally {
+      setBindingSens(false)
     }
+  }
+
+  const submitSerial = () => {
+    const value = serialInput.trim()
+    if (!value) return
+    handleSensor(value)
   }
 
   const checkedIn = Boolean(athlete.checked_in)
@@ -249,20 +259,45 @@ function AthleteCard({ athlete, sensors, sessionId, onUpdate }) {
           </Typography>
         </Box>
 
-        {/* Sensor ANT+ */}
-        <FormControl size="small" sx={{ minWidth: 150 }}>
-          <Select
-            value={athlete.sensor_id ?? ''}
-            onChange={e => handleSensor(e.target.value || null)}
-            displayEmpty
+        {/* Sensor ANT+: digita o ID do frequencímetro */}
+        {athlete.sensor_serial ? (
+          <Chip
+            icon={<Icon icon="heart-rate-monitor" />}
+            label={`Sensor ${athlete.sensor_serial}`}
+            color="success"
+            variant="outlined"
+            onDelete={bindingSens ? undefined : () => handleSensor(null)}
             disabled={!checkedIn}
-          >
-            <MenuItem value=""><em>Sem sensor</em></MenuItem>
-            {sensors.map(s => (
-              <MenuItem key={s.id} value={s.id}>{s.label}</MenuItem>
-            ))}
-          </Select>
-        </FormControl>
+          />
+        ) : (
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+            <TextField
+              size="small"
+              placeholder="ID do sensor"
+              value={serialInput}
+              onChange={e => setSerialInput(e.target.value.replace(/\D/g, '').slice(0, 5))}
+              onKeyDown={e => { if (e.key === 'Enter') submitSerial() }}
+              disabled={!checkedIn || bindingSens}
+              inputProps={{ inputMode: 'numeric', maxLength: 5, 'aria-label': 'ID do sensor ANT+' }}
+              sx={{ width: 120 }}
+            />
+            <Tooltip title="Vincular sensor">
+              <span>
+                <IconButton
+                  size="small"
+                  color="primary"
+                  onClick={submitSerial}
+                  disabled={!checkedIn || bindingSens || !serialInput.trim()}
+                >
+                  {bindingSens
+                    ? <CircularProgress size={18} />
+                    : <Icon icon="link" style={{ fontSize: 20 }} />
+                  }
+                </IconButton>
+              </span>
+            </Tooltip>
+          </Box>
+        )}
 
         {/* Botão check-in */}
         <Tooltip title={checkedIn ? 'Remover check-in' : 'Confirmar presença'}>
@@ -292,7 +327,6 @@ function AthleteCard({ athlete, sensors, sessionId, onUpdate }) {
 // LOBBY VIEW PRINCIPAL
 // ──────────────────────────────────────────────────
 export default function LobbyView({ sessionId }) {
-  const sensors    = useSensors()
   const [session,    setSession]    = useState(null)
   const [athletes,   setAthletes]   = useState([])
   const [monitorUrl, setMonitorUrl] = useState('')
@@ -304,15 +338,23 @@ export default function LobbyView({ sessionId }) {
 
   const showSnack = (msg, severity = 'info') => setSnack({ open: true, msg, severity })
 
-  // ── Carrega dados da sessão ──
+  // ── Carrega dados da sessão + IDs dos sensores já vinculados ──
   useEffect(() => {
     if (!sessionId) return
     fetch(`/api/sessions/${sessionId}`)
       .then(r => r.json())
-      .then(data => {
+      .then(async data => {
         setSession(data.session ?? data)
-        setAthletes(data.athletes ?? [])
+        const list = data.athletes ?? []
+        setAthletes(list)
         if (data.session?.status === 'active') setStarted(true)
+
+        try {
+          const r = await fetch(`/api/sessions/${sessionId}/assign-sensor`)
+          const s = await r.json()
+          const map = s.sensors ?? {}
+          setAthletes(list.map(a => ({ ...a, sensor_serial: map[a.athlete_id] ?? null })))
+        } catch {}
       })
       .catch(() => showSnack('Erro ao carregar sessão', 'error'))
   }, [sessionId])
@@ -481,9 +523,9 @@ export default function LobbyView({ sessionId }) {
             <Grid item xs={12} sm={6} key={athlete.athlete_id}>
               <AthleteCard
                 athlete={athlete}
-                sensors={sensors}
                 sessionId={sessionId}
                 onUpdate={handleAthleteUpdate}
+                showSnack={showSnack}
               />
             </Grid>
           ))}
