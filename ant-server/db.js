@@ -19,15 +19,19 @@
  *      sessão ATIVA via session_athletes.sensor_id (check-in)
  *   4. Se sim → grava em session_hr_series vinculado à sessão
  *   5. Se não → usa sensors.athlete_id como fallback (sem session_id)
+ *
+ * Janela de horário:
+ *   - status 'active'    → resolve sempre (o coach apertou "Iniciar"; não depende de start/end)
+ *   - status 'scheduled' → só resolve dentro de start_datetime..end_datetime
  */
 
 import mysql from 'mysql2/promise'
 
 let pool = null
 
-// ────────────────────────────────────────────────────────────
+// ────────────────────────────────────────────────────────
 // POOL
-// ────────────────────────────────────────────────────────────
+// ────────────────────────────────────────────────────────
 
 export function initDb() {
   if (!pool) {
@@ -58,9 +62,9 @@ export async function closeDb() {
   }
 }
 
-// ────────────────────────────────────────────────────────────
+// ────────────────────────────────────────────────────────
 // SENSORES — inicialização do AntService
-// ────────────────────────────────────────────────────────────
+// ────────────────────────────────────────────────────────
 
 /**
  * Retorna todos os sensores ativos.
@@ -79,9 +83,58 @@ export async function getAllActiveSensors() {
   return rows
 }
 
-// ────────────────────────────────────────────────────────────
+// ────────────────────────────────────────────────────────
+// DIAGNÓSTICO — explica no terminal por que o sensor não resolveu para uma sessão
+// ────────────────────────────────────────────────────────
+
+const DIAG_INTERVAL_MS = 30_000
+const lastDiag = new Map()
+
+async function diagnoseUnresolved(deviceId, reason) {
+  const now = Date.now()
+  if (now - (lastDiag.get(deviceId) || 0) < DIAG_INTERVAL_MS) return
+  lastDiag.set(deviceId, now)
+
+  try {
+    const db = getPool()
+    const [rows] = await db.execute(
+      `SELECT s.id AS sensor_id, s.is_active AS sensor_ativo, s.athlete_id AS sensor_athlete_id,
+              sa.session_id, sa.athlete_id, sa.checked_in,
+              ts.status, ts.start_datetime, ts.end_datetime, NOW() AS db_now
+       FROM sensors s
+       LEFT JOIN session_athletes sa ON sa.sensor_id = s.id
+       LEFT JOIN training_sessions ts ON ts.id = sa.session_id
+       WHERE s.serial = ?
+       ORDER BY ts.start_datetime DESC
+       LIMIT 3`,
+      [String(deviceId)]
+    )
+
+    console.warn(`[DB] Device ${deviceId}: ${reason}`)
+    if (rows.length === 0) {
+      console.warn(`[DB]   sensors.serial = '${deviceId}' não existe — vincule o ID no Lobby.`)
+      return
+    }
+    rows.forEach((r) => {
+      if (!r.session_id) {
+        console.warn(`[DB]   sensor existe (ativo=${r.sensor_ativo}) mas não está vinculado a nenhum atleta de sessão.`)
+      } else {
+        console.warn(
+          `[DB]   sessão=${r.session_id} status=${r.status} checked_in=${r.checked_in} ` +
+          `start=${r.start_datetime?.toISOString?.() ?? r.start_datetime} ` +
+          `end=${r.end_datetime?.toISOString?.() ?? r.end_datetime} ` +
+          `NOW()=${r.db_now?.toISOString?.() ?? r.db_now} sensor_ativo=${r.sensor_ativo}`
+        )
+      }
+    })
+  } catch (err) {
+    console.warn(`[DB] Diagnóstico do device ${deviceId} falhou:`, err.message)
+  }
+}
+
+// ────────────────────────────────────────────────────────
 // RESOLUÇÃO DO ATLETA
-// ────────────────────────────────────────────────────────────
+// ────────────────────────────────────────────────────────
 
 /**
  * Resolve o atleta e a sessão ativa a partir do DeviceId ANT+.
@@ -112,6 +165,8 @@ export async function resolveAthleteByDeviceId(deviceId) {
   const db = getPool()
 
   // — Passo 1: Sensor em check-in ativo em uma sessão
+  //   status 'active'    → sempre vale (o coach iniciou a sessão)
+  //   status 'scheduled' → só dentro da janela start_datetime..end_datetime
   const [activeRows] = await db.execute(
     `SELECT
        sa.athlete_id,
@@ -129,14 +184,20 @@ export async function resolveAthleteByDeviceId(deviceId) {
      JOIN session_athletes sa ON sa.sensor_id = s.id
                               AND sa.checked_in = 1
      JOIN training_sessions ts ON ts.id = sa.session_id
-                               AND ts.status IN ('scheduled', 'active')
-                               AND ts.start_datetime <= NOW()
-                               AND (ts.end_datetime IS NULL OR ts.end_datetime >= NOW())
+                               AND (
+                                 ts.status = 'active'
+                                 OR (
+                                   ts.status = 'scheduled'
+                                   AND ts.start_datetime <= NOW()
+                                   AND (ts.end_datetime IS NULL OR ts.end_datetime >= NOW())
+                                 )
+                               )
      JOIN users u             ON u.id = sa.athlete_id
                               AND u.is_active = 1
      LEFT JOIN athlete_profiles ap ON ap.user_id = u.id
      WHERE s.serial    = ?
        AND s.is_active = 1
+     ORDER BY (ts.status = 'active') DESC, ts.start_datetime DESC
      LIMIT 1`,
     [String(deviceId)]
   )
@@ -144,6 +205,12 @@ export async function resolveAthleteByDeviceId(deviceId) {
   if (activeRows.length > 0) {
     return { ...activeRows[0], session_id: activeRows[0].session_id ?? null }
   }
+
+  // Passo 1 falhou: explica o motivo no terminal (no máximo 1x a cada 30s por device)
+  diagnoseUnresolved(
+    deviceId,
+    'não resolveu para nenhuma sessão ativa/agendada com check-in — os dados não aparecerão no monitor.'
+  )
 
   // — Passo 2: Fallback — vínculo histórico sensors.athlete_id
   const [fallbackRows] = await db.execute(
@@ -175,9 +242,9 @@ export async function resolveAthleteByDeviceId(deviceId) {
 // Alias para compatibilidade com websocketServer.js (que ainda usa getAthleteByDeviceId)
 export const getAthleteByDeviceId = resolveAthleteByDeviceId
 
-// ────────────────────────────────────────────────────────────
+// ────────────────────────────────────────────────────────
 // GRAVAÇÃO DE FC — session_hr_series
-// ────────────────────────────────────────────────────────────
+// ────────────────────────────────────────────────────────
 
 /**
  * Persiste uma leitura de FC em session_hr_series.
@@ -227,9 +294,9 @@ export const createHeartRateLog = ({ athlete_id, session_id, sensor_id, heart_ra
     block_type:   null,
   })
 
-// ────────────────────────────────────────────────────────────
+// ────────────────────────────────────────────────────────
 // SESSÕES — check-in e agregados
-// ────────────────────────────────────────────────────────────
+// ────────────────────────────────────────────────────────
 
 /**
  * Marca check-in automático de um atleta em uma sessão quando
@@ -332,10 +399,15 @@ export async function getActiveSessionForAthlete(tenant_id, athlete_id) {
      JOIN session_athletes sa ON sa.session_id = ts.id
      WHERE ts.tenant_id  = ?
        AND sa.athlete_id = ?
-       AND ts.status IN ('scheduled', 'active')
-       AND ts.start_datetime <= NOW()
-       AND (ts.end_datetime IS NULL OR ts.end_datetime >= NOW())
-     ORDER BY ts.start_datetime DESC
+       AND (
+         ts.status = 'active'
+         OR (
+           ts.status = 'scheduled'
+           AND ts.start_datetime <= NOW()
+           AND (ts.end_datetime IS NULL OR ts.end_datetime >= NOW())
+         )
+       )
+     ORDER BY (ts.status = 'active') DESC, ts.start_datetime DESC
      LIMIT 1`,
     [tenant_id, athlete_id]
   )

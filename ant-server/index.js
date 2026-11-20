@@ -7,6 +7,7 @@
  * - Inicializa o AntService (Continuous Scanning Mode)
  * - Inicia o HeartRateWebSocketServer em /ws/heartrate
  * - Registra todos os sensores ativos do banco no AntService
+ *   (na inicialização e a cada 15s, para pegar sensores cadastrados depois, ex.: pelo Lobby)
  * - Expõe API REST mínima:
  *     GET  /health              — healthcheck
  *     POST /ant/start           — inicia o AntService manualmente
@@ -37,10 +38,11 @@ import { getAntService } from './antService.js'
 import { HeartRateWebSocketServer } from './websocketServer.js'
 
 const PORT = parseInt(process.env.ANT_SERVER_PORT || '3001', 10)
+const SENSOR_REFRESH_MS = 15_000
 
-// ─────────────────────────────────────────────────────────────
+// ───────────────────────────────────────────────────────────────
 // SERVIDOR HTTP
-// ─────────────────────────────────────────────────────────────
+// ───────────────────────────────────────────────────────────────
 
 const server = http.createServer((req, res) => {
   // CORS — permite que o Next.js (localhost:3000) se conecte
@@ -56,13 +58,13 @@ const server = http.createServer((req, res) => {
 
   const url = req.url || '/'
 
-  // ── GET /health ─────────────────────────────────────────────
+  // ── GET /health ───────────────────────────────────────────────────────────
   if (req.method === 'GET' && url === '/health') {
     respondJson(res, 200, { ok: true, uptime: process.uptime() })
     return
   }
 
-  // ── GET /ant/status ─────────────────────────────────────────
+  // ── GET /ant/status ───────────────────────────────────────────────────
   if (req.method === 'GET' && url === '/ant/status') {
     const ant = getAntService()
     respondJson(res, 200, {
@@ -73,7 +75,7 @@ const server = http.createServer((req, res) => {
     return
   }
 
-  // ── POST /ant/start ─────────────────────────────────────────
+  // ── POST /ant/start ───────────────────────────────────────────────────
   if (req.method === 'POST' && url === '/ant/start') {
     startAntService()
       .then(() => respondJson(res, 200, { success: true, message: 'ANT+ service started' }))
@@ -81,7 +83,7 @@ const server = http.createServer((req, res) => {
     return
   }
 
-  // ── POST /ant/stop ──────────────────────────────────────────
+  // ── POST /ant/stop ────────────────────────────────────────────────────
   if (req.method === 'POST' && url === '/ant/stop') {
     getAntService()
       .stop()
@@ -90,14 +92,14 @@ const server = http.createServer((req, res) => {
     return
   }
 
-  // ── POST /ant/reset ─────────────────────────────────────────
+  // ── POST /ant/reset ───────────────────────────────────────────────────
   if (req.method === 'POST' && url === '/ant/reset') {
     wsServer.resetAllCalories()
     respondJson(res, 200, { success: true, message: 'Calories reset for all athletes' })
     return
   }
 
-  // ── POST /session/ended ─────────────────────────────────────
+  // ── POST /session/ended ───────────────────────────────────────────────
   // Chamado pelo /api/sessions/[id]/finish após encerrar a sessão.
   // Dispara handleSessionEnded no wsServer:
   //   1. Atualiza agregados de session_athletes (avg_hr, zonas, etc.)
@@ -128,16 +130,16 @@ const server = http.createServer((req, res) => {
   respondJson(res, 404, { error: 'Not found' })
 })
 
-// ─────────────────────────────────────────────────────────────
+// ───────────────────────────────────────────────────────────────
 // WEBSOCKET SERVER
-// ─────────────────────────────────────────────────────────────
+// ───────────────────────────────────────────────────────────────
 
 // Instanciado aqui para ter acesso ao resetAllCalories() e handleSessionEnded() nas rotas REST
 const wsServer = new HeartRateWebSocketServer(server)
 
-// ─────────────────────────────────────────────────────────────
+// ───────────────────────────────────────────────────────────────
 // HELPERS
-// ─────────────────────────────────────────────────────────────
+// ───────────────────────────────────────────────────────────────
 
 function respondJson(res, status, body) {
   res.writeHead(status, { 'Content-Type': 'application/json' })
@@ -156,9 +158,37 @@ function readBody(req) {
   })
 }
 
-// ─────────────────────────────────────────────────────────────
+// ───────────────────────────────────────────────────────────────
+// REGISTRO DE SENSORES NO ANTSERVICE
+// ───────────────────────────────────────────────────────────────
+
+/**
+ * Registra no AntService os sensores ativos do banco que ainda não estão sendo monitorados.
+ * @param {boolean} verbose - loga o total e avisa seriais não numéricos (usado só no start)
+ */
+async function registerSensors(verbose = false) {
+  const antService = getAntService()
+  const sensors = await getAllActiveSensors()
+  const known = new Set(antService.getScannedDevices())
+
+  if (verbose) console.log(`[ANT+] Registering ${sensors.length} active sensor(s)...`)
+
+  sensors.forEach(({ serial }) => {
+    const deviceId = parseInt(serial, 10)
+    if (isNaN(deviceId)) {
+      if (verbose) {
+        console.warn(`[ANT+] Serial '${serial}' is not numeric — skipping device registration`)
+        console.warn(`[ANT+] Update sensors.serial with the real ANT+ DeviceId (numeric)!`)
+      }
+      return
+    }
+    if (!known.has(deviceId)) antService.scanForDevice(deviceId)
+  })
+}
+
+// ───────────────────────────────────────────────────────────────
 // INICIALIZAÇÃO DO ANT+
-// ─────────────────────────────────────────────────────────────
+// ───────────────────────────────────────────────────────────────
 
 async function startAntService() {
   const antService = getAntService()
@@ -171,25 +201,15 @@ async function startAntService() {
   await antService.start()
 
   try {
-    const sensors = await getAllActiveSensors()
-    console.log(`[ANT+] Registering ${sensors.length} active sensor(s)...`)
-    sensors.forEach(({ serial }) => {
-      const deviceId = parseInt(serial, 10)
-      if (!isNaN(deviceId)) {
-        antService.scanForDevice(deviceId)
-      } else {
-        console.warn(`[ANT+] Serial '${serial}' is not numeric — skipping device registration`)
-        console.warn(`[ANT+] Update sensors.serial with the real ANT+ DeviceId (numeric)!`)
-      }
-    })
+    await registerSensors(true)
   } catch (err) {
     console.error('[ANT+] Error loading sensors from DB:', err.message)
   }
 }
 
-// ─────────────────────────────────────────────────────────────
+// ───────────────────────────────────────────────────────────────
 // GRACEFUL SHUTDOWN
-// ─────────────────────────────────────────────────────────────
+// ───────────────────────────────────────────────────────────────
 
 async function shutdown(signal) {
   console.log(`\n[Server] Received ${signal}. Shutting down gracefully...`)
@@ -208,9 +228,9 @@ async function shutdown(signal) {
 process.on('SIGTERM', () => shutdown('SIGTERM'))
 process.on('SIGINT',  () => shutdown('SIGINT'))
 
-// ─────────────────────────────────────────────────────────────
+// ───────────────────────────────────────────────────────────────
 // START
-// ─────────────────────────────────────────────────────────────
+// ───────────────────────────────────────────────────────────────
 
 async function main() {
   console.log(`[Server] Loading .env from: ${resolve(__dirname, '../.env')}`)
@@ -236,6 +256,14 @@ async function main() {
     console.log(`   Stop ANT     : POST http://localhost:${PORT}/ant/stop`)
     console.log(`   Session Ended: POST http://localhost:${PORT}/session/ended`)
   })
+
+  // 4. Registra periodicamente sensores novos (cadastrados depois do start, ex.: pelo Lobby)
+  setInterval(() => {
+    if (!getAntService().isServiceRunning()) return
+    registerSensors(false).catch((err) => {
+      console.warn('[ANT+] Sensor refresh failed:', err.message)
+    })
+  }, SENSOR_REFRESH_MS)
 }
 
 main().catch((err) => {
