@@ -15,7 +15,8 @@
 .w3-negrito { font-weight: bold !important; }
 .w3-negrito-extra { font-weight: 900; }
 
-body { padding: 0; margin: 0; }
+/* Tela de TV: sem margem e sem rolagem */
+html, body { padding: 0; margin: 0; height: 100%; overflow: hidden; }
 
 /* ── Animações dos ícones ── */
 .fa-heart-pulse, .fa-heartbeat, .fa-percent {
@@ -39,13 +40,38 @@ body { padding: 0; margin: 0; }
   50%       { opacity: 0.5; }
 }
 
+/* ── Estrutura da tela ── */
+#gridContainer { display: block; position: relative; width: 100%; margin: 0; padding: 0; }
+#mainHeader { margin: 0; }
+
+/* Área dos cards: CSS Grid com colunas/linhas definidas por JS conforme o nº de atletas */
+#cardsArea {
+  display: grid;
+  box-sizing: border-box;
+  width: 100%;
+  overflow: hidden;
+}
+
 .card-wrapper {
   box-sizing: border-box;
-  display: inline-block;
-  vertical-align: top;
+  display: block;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
   border-radius: 8px;
   transition: background-color 1.5s ease-in-out;
 }
+
+/* Cabeçalho do card: nome à esquerda, calorias à direita, sempre em UMA linha */
+.card-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  white-space: nowrap;
+}
+.card-head .card-name { min-width: 0; overflow: hidden; }
+.card-head .card-cal  { flex: none; float: none !important; display: flex; align-items: center; gap: 6px; }
 
 /* ── Gráfico circular ── */
 .flex-wrapper {
@@ -63,7 +89,7 @@ body { padding: 0; margin: 0; }
   transition: background-color 1.5s ease-in-out;
 }
 .circular-chart { display: block; margin: 10px auto; max-width: 100%; }
-.circle-bg { fill: none; stroke: rgba(0,0,0,0.15); stroke-width: 3.8; transition: stroke 1.5s ease-in-out; }
+.circle-bg { fill: none; stroke: transparent; stroke-width: 3.8; transition: stroke 1.5s ease-in-out; }
 .circle {
   fill: none;
   stroke-width: 4;
@@ -81,6 +107,7 @@ body { padding: 0; margin: 0; }
 .simbolo    { fill: #000; font-family: sans-serif; font-size: 0.4em; text-anchor: middle; }
 
 #waitingMsg {
+  grid-column: 1 / -1;
   width: 100%;
   text-align: center;
   padding: 80px 20px;
@@ -163,7 +190,7 @@ body { padding: 0; margin: 0; }
   <div style="font-size:0.9rem;color:#555;margin-top:4px;">Esta tela atualizará automaticamente quando a sessão iniciar</div>
 </div>
 
-<div id="gridContainer" style="display:flex; flex-wrap:wrap; position:relative;">
+<div id="gridContainer">
   <div id="mainHeader" class="w3-bar" style="height:40px; width:100%; background-color:#f1f1f1; border-bottom:1px solid #ccc; padding:0">
     <div class="w3-bar-item w3-left" style="display:flex; align-items:center;">
       <i class="fas fa-heartbeat w3-xxlarge w3-top w3-left" style="cursor:pointer;"></i>
@@ -183,7 +210,9 @@ body { padding: 0; margin: 0; }
       <span class="w3-large w3-negrito" id="sessionTimer">00:00:00</span>
     </div>
   </div>
-  <div id="waitingMsg">Aguardando dados dos atletas…</div>
+  <div id="cardsArea">
+    <div id="waitingMsg">Aguardando dados dos atletas…</div>
+  </div>
 </div>
 
 <script>
@@ -215,6 +244,9 @@ let soonPollingStarted = false
 // Flag: bloqueia showSessionEnded/showDisconnected enquanto overlay "em breve" estiver ativo
 let sessionSoonActive = false
 
+// Máximo de caracteres do nome do atleta no card (evita quebra do cabeçalho em 2 linhas)
+const MAX_NAME_CHARS = 16
+
 // ══════════════════════════════════════════════════════════════
 const COLOR_MAPPING_OPACITY = {
   'w3-grey':        'rgba(97, 97, 97, 0.7)',
@@ -245,6 +277,7 @@ const ZONE_WEIGHT = { 1: 1.0, 2: 1.5, 3: 2.5, 4: 4.0, 5: 3.0 }
 // TEMPLATES DOS CARDS (9 layouts, gerados por função)
 // ══════════════════════════════════════════════════════════════
 const FIRE_STYLE = '--fa-primary-color:#ff9500;--fa-secondary-color:#ff0000;--fa-secondary-opacity:1;'
+const COINS_STYLE = '--fa-primary-color:#b89105;--fa-secondary-color:#686868;--fa-secondary-opacity:1;--fa-animation-duration:2s;'
 const PATH_D = 'M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831'
 
 function buildTemplate(o) {
@@ -255,9 +288,9 @@ function buildTemplate(o) {
   const coinsExtra = o.coinsExtra || ''
   const chartStyle = o.chartWidth ? ` style="width:${o.chartWidth}"` : ''
   return `
-    <header class="w3-container ${o.hdrMargin ? 'w3-margin-bottom ' : ''}w3-verde-preto ${o.hdrRound || 'w3-round-large'}">
-      <span class="${o.nameCls} w3-negrito"><span data-name></span></span>
-      <div class="w3-right">
+    <header class="card-head w3-container ${o.hdrMargin ? 'w3-margin-bottom ' : ''}w3-verde-preto ${o.hdrRound || 'w3-round-large'}">
+      <span class="${o.nameCls} w3-negrito card-name"><span data-name></span></span>
+      <div class="w3-right card-cal">
         <i class="fa-duotone fa-solid fa-fire ${o.calIconCls}" style="${FIRE_STYLE}"></i>
         <span class="${o.calTxtCls} w3-negrito"><span data-calories></span></span>
       </div>
@@ -273,7 +306,7 @@ function buildTemplate(o) {
           <div class="w3-negrito-extra w3-col l8 ${bodyCls}"${px ? ` style="${px}"` : ''}><span data-calories2></span></div>
         </div>
         <div class="w3-center w3-row-padding">
-          <i class="fa-duotone fa-thin fa-coins fa-beat-fade w3-col l4 ${bodyCls}" style="--fa-primary-color:#080808;--fa-secondary-color:#b89105;--fa-secondary-opacity:1;--fa-animation-duration:2s;${coinsExtra}${px}padding-top:0.3em;"></i>
+          <i class="fa-duotone fa-thin fa-coins fa-beat-fade w3-col l4 ${bodyCls}" style="${COINS_STYLE}${coinsExtra}${px}padding-top:0.3em;"></i>
           <div class="w3-negrito-extra w3-col l8 ${bodyCls}"${px ? ` style="${px}"` : ''}><span data-points></span></div>
         </div>
       </div>
@@ -320,17 +353,11 @@ function getGridConfig(n) {
   return         { colunas: 7, linhas: 6, gap: 12, templateKey: '21_42' }
 }
 
-function calcularTamanhoDiv(n) {
-  const config = getGridConfig(n)
-  const larguraTotalDisponivel = document.documentElement.clientWidth
-  const alturaTotalDisponivel  = window.innerHeight
-  const { colunas, linhas, gap } = config
-  const alturaCabecalho = document.getElementById('mainHeader').offsetHeight || 40
-
-  const larguraDiv = (larguraTotalDisponivel - (colunas + 1) * gap) / colunas
-  const alturaDiv  = (alturaTotalDisponivel - ((linhas + 1) * gap) - alturaCabecalho) / linhas
-
-  return { larguraDiv, alturaDiv, config }
+// Limita o nome a MAX_NAME_CHARS caracteres (evita quebra em 2 linhas)
+function shortName(name) {
+  const s = String(name || '—').trim()
+  const chars = Array.from(s)
+  return chars.length > MAX_NAME_CHARS ? chars.slice(0, MAX_NAME_CHARS).join('').trimEnd() : s
 }
 
 // ── Helpers de UI ──────────────────────────────────────────────
@@ -589,34 +616,32 @@ function processBatch(list) {
 }
 
 // ══════════════════════════════════════════════════════════════
-// Grid e Cards
+// Grid e Cards (CSS Grid: colunas e linhas fixas conforme o nº de atletas)
 // ══════════════════════════════════════════════════════════════
 function buildGrid() {
   const list = Array.from(athletes.values()).sort((x, y) => x.name.localeCompare(y.name, 'pt-BR'))
   const n = list.length
   if (n === 0) return
 
-  const { larguraDiv, alturaDiv, config } = calcularTamanhoDiv(n)
-  const { gap, templateKey } = config
-  const container = document.getElementById('gridContainer')
+  const { colunas, linhas, gap, templateKey } = getGridConfig(n)
+  const area   = document.getElementById('cardsArea')
   const header = document.getElementById('mainHeader')
 
-  container.innerHTML = ''
-  container.appendChild(header)
-
-  container.style.gap          = `${gap}px`
-  container.style.padding      = `${gap}px`
-  container.style.alignContent = 'flex-start'
+  // A área dos cards ocupa exatamente o espaço abaixo do cabeçalho, sem rolagem
+  const alturaArea = Math.max(0, window.innerHeight - header.offsetHeight)
+  area.style.height              = `${alturaArea}px`
+  area.style.padding             = `${gap}px`
+  area.style.gap                 = `${gap}px`
+  area.style.gridTemplateColumns = `repeat(${colunas}, minmax(0, 1fr))`
+  area.style.gridTemplateRows    = `repeat(${linhas}, minmax(0, 1fr))`
+  area.innerHTML = ''
 
   list.forEach(st => {
     const wrapper = document.createElement('div')
     wrapper.className = 'card-wrapper w3-card w3-round-large'
     wrapper.id        = `card-${st.athleteId}`
-    wrapper.style.width    = `${larguraDiv}px`
-    wrapper.style.height   = `${alturaDiv}px`
-    wrapper.style.overflow = 'hidden'
     wrapper.innerHTML = CARD_TEMPLATES[templateKey] || CARD_TEMPLATES['21_42']
-    container.appendChild(wrapper)
+    area.appendChild(wrapper)
     updateCard(st)
   })
 }
@@ -634,7 +659,7 @@ function updateCard(st) {
     : 0
   const kcal = Math.round(st.calories)
 
-  setText(card, '[data-name]',      st.name)
+  setText(card, '[data-name]',      shortName(st.name))
   setText(card, '[data-hr]',        st.heartRate || '—')
   setText(card, '[data-calories]',  kcal)
   setText(card, '[data-calories2]', kcal)
@@ -654,7 +679,7 @@ function updateCard(st) {
   })
 }
 
-// Recalcula o tamanho dos cards ao redimensionar a janela
+// Recalcula a área dos cards ao redimensionar a janela
 let resizeTimer = null
 window.addEventListener('resize', () => {
   clearTimeout(resizeTimer)
