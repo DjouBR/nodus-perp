@@ -7,6 +7,7 @@
  * Estratégia:
  *   - Lê o HTML estático de public/monitor/index.html
  *   - Injeta window.__MONITOR_TOKEN__ = '<token>' antes do </head>
+ *   - Injeta public/monitor/stale.js antes do </body> (card cinza sem sinal)
  *   - Serve o HTML diretamente como Response
  *
  * IMPORTANTE: Este arquivo deve ser route.js (Route Handler), não page.jsx.
@@ -33,6 +34,9 @@ export async function GET(req, { params }) {
   // Injeta o token como variável global JS antes do </head>
   const injection = `<script>window.__MONITOR_TOKEN__ = ${JSON.stringify(token)};</script>\n`
   html = html.replace('</head>', injection + '</head>')
+
+  // Card cinza quando o atleta deixa de enviar dados (ver public/monitor/stale.js)
+  html = html.replace('</body>', '<script src="/monitor/stale.js"></script>\n</body>')
 
   return new NextResponse(html, {
     headers: { 'Content-Type': 'text/html; charset=utf-8' },

@@ -1,0 +1,484 @@
+<!DOCTYPE html>
+<html lang='pt-BR'>
+<head>
+<meta charset='utf-8'>
+<meta name='viewport' content='width=device-width,initial-scale=1'>
+<title>NODUS — Monitor do Treinador</title>
+<link rel='stylesheet' href='/css/all.css'>
+<style>
+*{box-sizing:border-box}
+html,body{margin:0;height:100%;overflow:hidden;background:#eef1f5;color:#111827;font-family:system-ui,-apple-system,'Segoe UI',Roboto,Arial,sans-serif}
+[hidden]{display:none!important}
+#top{height:52px;background:#0b1220;color:#fff;display:flex;align-items:center;gap:10px;padding:0 14px;white-space:nowrap}
+#top .brand{color:#1aff15;font-size:22px}
+#ttl{font-size:16px;margin:0;font-weight:700;overflow:hidden;text-overflow:ellipsis;max-width:32vw}
+.sp{flex:1}
+.chip{font-size:11px;font-weight:700;letter-spacing:.05em;padding:3px 10px;border-radius:99px;background:#374151;color:#e5e7eb}
+.chip.live{background:#14532d;color:#86efac}
+.chip.wait{background:#713f12;color:#fde68a}
+#cnt{font-size:13px;color:#9ca3af}
+#tmr{font-variant-numeric:tabular-nums;font-weight:700;font-size:15px}
+.grp{display:flex;gap:4px}
+.ib{background:transparent;border:1px solid #374151;color:#d1d5db;border-radius:8px;height:32px;min-width:32px;padding:0 10px;cursor:pointer;font-size:12px;font-weight:600;font-family:inherit}
+.ib:hover{background:#1f2937}
+.ib.on{background:#1aff15;border-color:#1aff15;color:#06270a}
+#ws{font-size:15px}
+#ws.on{color:#22c55e}
+#ws.off{color:#ef4444}
+#stage{height:calc(100% - 52px);padding:12px}
+#stage.lst{display:grid;gap:10px;grid-auto-flow:column;align-content:stretch;overflow:auto}
+#stage.crd{display:grid;overflow:hidden}
+#stage.crd.scroll{overflow:auto}
+.empty{grid-column:1/-1;padding:80px 20px;text-align:center;color:#6b7280;font-size:20px;font-weight:600}
+
+.row{background:#fff;border-radius:10px;box-shadow:0 1px 3px rgba(0,0,0,.14);overflow:hidden;min-width:0}
+.row.z5{box-shadow:0 0 0 2px #f44336,0 1px 3px rgba(0,0,0,.14)}
+.row.l2{display:flex;flex-direction:column}
+.row.l1{display:grid;grid-template-columns:minmax(150px,27%) 1fr}
+.who{display:flex;align-items:center;gap:8px;padding:6px 10px;min-width:0;transition:background .8s}
+.row.l1 .who{padding:8px 10px}
+.av{width:34px;height:34px;border-radius:50%;background:rgba(0,0,0,.2);display:flex;align-items:center;justify-content:center;font-weight:800;overflow:hidden;flex:none}
+.av img{width:100%;height:100%;object-fit:cover}
+.nm{min-width:0;flex:1;display:flex;flex-direction:column;line-height:1.15}
+.nm b{font-size:15px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.nm small{font-size:11px;opacity:.85;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.zb{font-weight:800;font-size:13px;white-space:nowrap}
+.vars{display:grid;grid-template-columns:repeat(auto-fit,minmax(54px,1fr));gap:2px 0;padding:6px;align-items:center;flex:1}
+.cell{display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;padding:2px 0;min-width:0}
+.cell i{font-size:18px}
+.cell b{font-size:19px;font-weight:800;line-height:1.1;font-variant-numeric:tabular-nums}
+.cell small{font-size:10px;color:#6b7280}
+.row.stale .vars{opacity:.45}
+
+.tcard{container-type:size;display:flex;flex-direction:column;border-radius:10px;overflow:hidden;box-shadow:0 2px 6px rgba(0,0,0,.25);transition:background .8s;min-width:0;min-height:0}
+.th{background:#000;color:#1aff15;font-weight:800;font-size:clamp(13px,9cqh,44px);padding:0 4cqw;height:17cqh;display:flex;align-items:center;justify-content:space-between;gap:8px;white-space:nowrap;flex:none}
+.th .tk{display:flex;align-items:center;gap:6px}
+.tbd{flex:1;display:grid;grid-auto-rows:1fr;gap:2cqmin;padding:2.5cqmin;min-height:0}
+.tile{background:rgba(255,255,255,.4);border-radius:8px;display:flex;flex-direction:column;align-items:center;justify-content:center;min-width:0;min-height:0;overflow:hidden}
+.tile b{font-size:clamp(14px,14cqmin,110px);font-weight:900;line-height:1.05;font-variant-numeric:tabular-nums}
+.tl{font-size:clamp(9px,4.6cqmin,22px);font-weight:700;display:flex;gap:6px;align-items:center;color:#1f2937}
+.tcard.stale .tbd{opacity:.55}
+
+.modal{position:fixed;inset:0;background:rgba(0,0,0,.5);display:flex;align-items:center;justify-content:center;z-index:50}
+.mbox{background:#fff;border-radius:12px;width:min(660px,94vw);max-height:90vh;display:flex;flex-direction:column;box-shadow:0 20px 50px rgba(0,0,0,.4)}
+.mh,.mf{padding:14px 18px;display:flex;align-items:center;justify-content:space-between;gap:10px}
+.mh{border-bottom:1px solid #e5e7eb;font-size:17px}
+.mf{border-top:1px solid #e5e7eb}
+.mbd{padding:14px 18px;overflow:auto}
+.opt{display:flex;gap:16px;flex-wrap:wrap;margin-bottom:10px;font-size:14px}
+.opt label{display:flex;align-items:center;gap:6px;cursor:pointer}
+.sep{margin:14px 0 6px;font-size:12px;font-weight:800;letter-spacing:.05em;text-transform:uppercase;color:#6b7280}
+.ci{display:flex;align-items:center;gap:10px;padding:6px 8px;border:1px solid #e5e7eb;border-radius:8px;margin-bottom:5px}
+.ci>i{width:24px;text-align:center;font-size:17px}
+.ci>span:nth-child(2){flex:1;font-size:13px}
+.ci em{color:#6b7280;font-style:normal;font-size:12px;margin-left:4px}
+.ci.dim{opacity:.55}
+.ca{display:flex;gap:4px}
+.ca button{border:1px solid #d1d5db;background:#f9fafb;border-radius:6px;padding:3px 9px;font-size:12px;cursor:pointer}
+.ca button:disabled{opacity:.4;cursor:default}
+.soon{font-size:11px;font-weight:700;color:#92400e;background:#fef3c7;border-radius:99px;padding:2px 8px}
+.btn{border:1px solid #d1d5db;background:#fff;border-radius:8px;padding:8px 14px;font-weight:600;cursor:pointer}
+.btn.pri{background:#111827;color:#fff;border-color:#111827}
+</style>
+</head>
+<body>
+<header id='top'>
+  <i class='fa-solid fa-heart-pulse brand'></i>
+  <h1 id='ttl'>NODUS — Monitor do Treinador</h1>
+  <span id='stt' class='chip'>CARREGANDO</span>
+  <span class='sp'></span>
+  <span id='cnt'>0/0 com sinal</span>
+  <span id='tmr'>00:00:00</span>
+  <div class='grp' id='views'>
+    <button class='ib' data-view='list1' title='Lista 1 — nome ao lado das variáveis'><i class='fa-solid fa-table-list'></i> Lista 1</button>
+    <button class='ib' data-view='list2' title='Lista 2 — nome acima das variáveis'><i class='fa-solid fa-list'></i> Lista 2</button>
+    <button class='ib' data-view='cards' title='Cards (até 6 variáveis)'><i class='fa-solid fa-table-cells-large'></i> Cards</button>
+  </div>
+  <button class='ib' id='bCfg' title='Configurar variáveis'><i class='fa-solid fa-sliders'></i></button>
+  <button class='ib' id='bFs' title='Tela cheia'><i class='fa-solid fa-expand'></i></button>
+  <span id='ws' class='off' title='Conexão com o ant-server'><i class='fa-solid fa-signal-stream-slash'></i></span>
+</header>
+
+<main id='stage'></main>
+
+<div id='modal' class='modal' hidden>
+  <div class='mbox'>
+    <div class='mh'><b>Configurar exibição</b><button class='btn' id='cfgX'>Fechar</button></div>
+    <div class='mbd'>
+      <div class='opt' id='cfgView'>
+        <label><input type='radio' name='v' value='list1'> Lista 1</label>
+        <label><input type='radio' name='v' value='list2'> Lista 2</label>
+        <label><input type='radio' name='v' value='cards'> Cards</label>
+        <label><input type='checkbox' id='cfgLabels'> Mostrar rótulos sob os valores</label>
+      </div>
+      <div class='sep'>Variáveis exibidas <span id='cfgCnt'></span></div>
+      <div id='cfgList'></div>
+    </div>
+    <div class='mf'><button class='btn' id='cfgReset'>Restaurar padrão</button><button class='btn pri' id='cfgOk'>Concluir</button></div>
+  </div>
+</div>
+
+<script>
+(function () {
+'use strict'
+var SESSION_ID = window.__SESSION_ID__
+var ANT_PORT = window.__ANT_PORT__ || '3001'
+var STALE_MS = 10000
+var KEY = 'nodus.coachMonitor.v1'
+var ZBG = {0:'#9e9e9e',1:'#8bc34a',2:'#00bcd4',3:'#ffeb3b',4:'#ff9800',5:'#f44336'}
+var ZFG = {0:'#ffffff',1:'#10240a',2:'#00262c',3:'#2b2600',4:'#2b1700',5:'#ffffff'}
+var ZCARD = {0:'rgba(97,97,97,.7)',1:'rgba(139,195,74,.7)',2:'rgba(0,188,212,.7)',3:'rgba(255,235,59,.7)',4:'rgba(255,152,0,.7)',5:'rgba(244,67,54,.7)'}
+var ZW = {1:1, 2:1.5, 3:2.5, 4:4, 5:3}
+var FIRE = '--fa-primary-color:#ff9500;--fa-secondary-color:#ff0000;--fa-secondary-opacity:1;'
+var COIN = '--fa-primary-color:#b89105;--fa-secondary-color:#686868;--fa-secondary-opacity:1;'
+var $ = function (id) { return document.getElementById(id) }
+var pad = function (n) { return String(n).padStart(2, '0') }
+var mmss = function (sec) { return pad(Math.floor(sec / 60)) + ':' + pad(Math.floor(sec % 60)) }
+var ini = function (n) { return (n || '?').trim().charAt(0).toUpperCase() }
+
+// ── Estado ──────────────────────────────────────────────────────
+var athletes = new Map()
+var session = null, tmin = 2, tmax = 4, layoutDirty = true, timerStart = 0
+function newState(id) {
+  return { id: id, name: 'Atleta ' + id, avatar: null, hrMax: 190, hrRest: 60, female: false, checkedIn: false,
+    hr: 0, cal: 0, zone: 0, lastSeen: 0, lastT: 0, trimp: 0, pts: 0, tzSec: 0, win: [], series: [], lastSample: 0 }
+}
+
+// ── Métricas calculadas no navegador (estimativas ao vivo) ──────
+function trimpMin(s, n) {
+  while (s.win.length && n - s.win[0][0] > 60000) s.win.shift()
+  return s.win.reduce(function (t, p) { return t + p[1] }, 0)
+}
+function calcHrr(s, n) {
+  var w = s.series.filter(function (p) { return n - p[0] <= 300000 })
+  if (w.length < 3) return null
+  var peak = w[0]
+  w.forEach(function (p) { if (p[1] > peak[1]) peak = p })
+  var target = peak[0] + 60000
+  if (n < target) return null
+  var after = w[0]
+  w.forEach(function (p) { if (Math.abs(p[0] - target) < Math.abs(after[0] - target)) after = p })
+  if (Math.abs(after[0] - target) > 10000) return null
+  return Math.max(0, peak[1] - after[1])
+}
+function calcDrift(s) {
+  var a = s.series
+  if (a.length < 120) return null
+  var m = Math.floor(a.length / 2)
+  var avg = function (x) { return x.reduce(function (t, p) { return t + p[1] }, 0) / x.length }
+  var h1 = avg(a.slice(0, m)), h2 = avg(a.slice(m))
+  return (h2 - h1) / h1 * 100
+}
+
+// ── Catálogo de variáveis (ícone e cor conforme o esboço) ───────
+var VARS = [
+  { id:'hr', label:'FC', title:'Frequência cardíaca (bpm)', icon:'fa-solid fa-heart-pulse', color:'#f44336', get:function (s) { return s.hr > 0 ? s.hr : null } },
+  { id:'pct', label:'%FCMáx', title:'% da FC máxima', icon:'fa-solid fa-percent', color:'#ff5722', get:function (s) { return s.hr > 0 && s.hrMax ? Math.round(s.hr / s.hrMax * 100) : null } },
+  { id:'epoc', label:'EPOC', title:'Consumo excessivo de O2 pós-exercício', icon:'fa-solid fa-fire-flame-curved', color:'#f44336', soon:1 },
+  { id:'trimp', label:'TRIMP', title:'TRIMP acumulado (Banister)', icon:'fa-solid fa-battery-three-quarters', color:'#ffc107', get:function (s) { return s.lastSeen ? Math.round(s.trimp) : null } },
+  { id:'trimpmin', label:'TRIMP/min', title:'TRIMP no último minuto', icon:'fa-solid fa-gauge-high', color:'#f44336', get:function (s, n) { return s.lastSeen ? trimpMin(s, n).toFixed(1) : null } },
+  { id:'mi', label:'MI', title:'Índice mecânico', icon:'fa-solid fa-person-running', color:'#2196f3', soon:1 },
+  { id:'ml', label:'ML', title:'Carga mecânica/min', icon:'fa-solid fa-bolt', color:'#00bcd4', soon:1 },
+  { id:'hrr', label:'HRR', title:'Recuperação da FC em 1 min (bpm)', icon:'fa-solid fa-arrow-trend-down', color:'#4caf50', get:function (s, n) { return calcHrr(s, n) } },
+  { id:'tz', label:'Zona alvo', title:'Tempo nas zonas alvo da sessão', icon:'fa-solid fa-stopwatch', color:'#00bcd4', get:function (s) { return s.lastSeen ? mmss(s.tzSec) : null } },
+  { id:'drift', label:'Deriva', title:'Deriva cardíaca (variação da FC média, 2ª metade x 1ª)', icon:'fa-solid fa-arrow-trend-up', color:'#ff9800', get:function (s) { var d = calcDrift(s); return d == null ? null : (d >= 0 ? '+' : '') + d.toFixed(1) + '%' } },
+  { id:'pse', label:'PSE', title:'Percepção subjetiva de esforço', icon:'fa-solid fa-face-tired', color:'#9c27b0', soon:1 },
+  { id:'hrv', label:'VFC', title:'VFC / DFA alpha-1', icon:'fa-solid fa-wave-square', color:'#009688', soon:1 },
+  { id:'kcal', label:'kcal', title:'Calorias', icon:'fa-duotone fa-solid fa-fire', style:FIRE, get:function (s) { return s.lastSeen ? Math.round(s.cal) : null } },
+  { id:'pts', label:'Pontos', title:'Pontos por zona', icon:'fa-duotone fa-thin fa-coins', style:COIN, get:function (s) { return s.lastSeen ? Math.round(s.pts) : null } }
+]
+var VB = {}
+VARS.forEach(function (v) { VB[v.id] = v })
+
+// ── Configuração (salva no navegador) ───────────────────────────
+var LIMIT = { list: 12, cards: 6 }
+var DEF = { view:'list2', labels:true, vars:{ list:['hr','pct','kcal','trimp','trimpmin','tz','hrr','drift'], cards:['hr','pct','trimp','trimpmin','tz','drift'] } }
+function mode() { return cfg.view === 'cards' ? 'cards' : 'list' }
+function clean(arr, md) {
+  var out = []
+  ;(arr || []).forEach(function (id) {
+    var v = VB[id]
+    if (v && !v.soon && out.indexOf(id) < 0 && !(md === 'cards' && id === 'kcal')) out.push(id)
+  })
+  return out.slice(0, LIMIT[md])
+}
+function loadCfg() {
+  var c = {}
+  try { c = JSON.parse(localStorage.getItem(KEY)) || {} } catch (e) {}
+  var vs = c.vars || {}
+  var l = clean(vs.list, 'list'), k = clean(vs.cards, 'cards')
+  return { view: ['list1','list2','cards'].indexOf(c.view) >= 0 ? c.view : DEF.view, labels: c.labels !== false,
+    vars: { list: l.length ? l : DEF.vars.list.slice(), cards: k.length ? k : DEF.vars.cards.slice() } }
+}
+var cfg = loadCfg()
+function saveCfg() { try { localStorage.setItem(KEY, JSON.stringify(cfg)) } catch (e) {} }
+
+// ── Dados da sessão e atletas (API autenticada) ─────────────────
+function sessActive() { return session && session.status === 'active' }
+function setStatus() {
+  var st = session ? session.status : ''
+  var el = $('stt')
+  el.className = 'chip' + (st === 'active' ? ' live' : (st === 'scheduled' || st === 'pending') ? ' wait' : '')
+  el.textContent = st === 'active' ? 'AO VIVO' : (st === 'scheduled' || st === 'pending') ? 'AGUARDANDO INÍCIO' : st === 'finished' ? 'ENCERRADA' : st === 'cancelled' ? 'CANCELADA' : '—'
+}
+function loadSession() {
+  return fetch('/api/sessions/' + SESSION_ID, { cache: 'no-store' }).then(function (r) {
+    if (r.status === 401) { location.href = '/login'; return null }
+    if (!r.ok) { $('stt').textContent = 'ERRO AO CARREGAR'; return null }
+    return r.json()
+  }).then(function (j) {
+    if (!j) return
+    session = j.session || {}
+    tmin = session.target_zone_min != null ? Number(session.target_zone_min) : 2
+    tmax = session.target_zone_max != null ? Number(session.target_zone_max) : 4
+    $('ttl').textContent = 'NODUS — ' + (session.name || 'Sessão')
+    document.title = 'NODUS — ' + (session.name || 'Monitor do Treinador')
+    setStatus()
+    if (sessActive() && !timerStart) timerStart = Date.now()
+    ;(j.athletes || []).forEach(function (a) {
+      var id = String(a.athlete_id)
+      var s = athletes.get(id)
+      if (!s) { s = newState(id); athletes.set(id, s); layoutDirty = true }
+      var ci = !!Number(a.checked_in)
+      if (s.checkedIn !== ci || s.name !== a.name) layoutDirty = true
+      s.name = a.name || s.name
+      s.avatar = a.avatar_url || null
+      s.hrMax = Number(a.hr_max) || s.hrMax
+      s.hrRest = Number(a.hr_rest) || 60
+      s.female = /^f/i.test(a.gender || '')
+      s.checkedIn = ci
+      s.apiName = true
+    })
+  }).catch(function () { $('stt').textContent = 'SEM CONEXÃO' })
+}
+
+// ── Ingestão dos dados do ant-server ────────────────────────────
+function ingest(a) {
+  if (!a || a.athleteId == null) return
+  if (String(a.sessionId) !== String(SESSION_ID)) return
+  var id = String(a.athleteId)
+  var s = athletes.get(id)
+  if (!s) { s = newState(id); athletes.set(id, s); layoutDirty = true }
+  if (a.athleteName && !s.apiName) s.name = a.athleteName
+  if (a.maxHeartRate) s.hrMax = Number(a.maxHeartRate)
+  var now = Date.now()
+  var hr = Number(a.heartRate) || 0
+  s.hr = hr
+  s.cal = Number(a.calories) || 0
+  s.zone = Number(a.zone) || 0
+  if (hr > 0) {
+    var dt = s.lastT ? Math.min((now - s.lastT) / 1000, 5) : 0
+    var rel = (hr - s.hrRest) / ((s.hrMax || 190) - s.hrRest)
+    if (rel > 0 && dt > 0) {
+      var inc = (dt / 60) * rel * Math.exp((s.female ? 1.67 : 1.92) * rel)
+      s.trimp += inc
+      s.win.push([now, inc])
+    }
+    if (s.zone >= 1) s.pts += (ZW[s.zone] || 0) * dt / 60
+    if (s.zone >= tmin && s.zone <= tmax) s.tzSec += dt
+    if (now - s.lastSample >= 5000) {
+      s.series.push([now, hr]); s.lastSample = now
+      if (s.series.length > 2200) s.series.shift()
+    }
+    s.lastSeen = now
+    s.lastT = now
+  } else {
+    s.lastT = 0
+  }
+}
+
+// ── Layout ──────────────────────────────────────────────────────
+function visible() {
+  return Array.from(athletes.values()).filter(function (s) { return s.checkedIn || s.lastSeen })
+    .sort(function (a, b) { return a.name.localeCompare(b.name, 'pt-BR') })
+}
+function gridCfg(n) {
+  var t = [[1,1,1,34],[2,2,1,32],[4,2,2,30],[6,3,2,28],[9,3,3,26],[12,4,3,24],[16,4,4,22],[20,5,4,20],[25,5,5,18],[30,6,5,16],[36,6,6,14]]
+  for (var i = 0; i < t.length; i++) if (n <= t[i][0]) return { cols: t[i][1], rows: t[i][2], gap: t[i][3] }
+  return { cols: 7, rows: 6, gap: 12 }
+}
+function iconHtml(v) { return "<i class='" + v.icon + "' style='" + (v.style || ('color:' + v.color)) + "'></i>" }
+function cellHtml(id) {
+  var v = VB[id]
+  return "<div class='cell' data-v='" + id + "' title='" + v.title + "'>" + iconHtml(v) + '<b>—</b>' + (cfg.labels ? '<small>' + v.label + '</small>' : '') + '</div>'
+}
+function listRow(s, kind, ids) {
+  var el = document.createElement('div')
+  el.className = 'row ' + kind
+  el.dataset.aid = s.id
+  el.innerHTML = "<div class='who'><div class='av'></div><div class='nm'><b></b><small></small></div><div class='zb'></div></div><div class='vars'>" + ids.map(cellHtml).join('') + '</div>'
+  el.querySelector('.nm b').textContent = s.name
+  var av = el.querySelector('.av')
+  if (s.avatar) {
+    var im = new Image()
+    im.alt = ''
+    im.onerror = function () { im.remove(); av.textContent = ini(s.name) }
+    im.src = s.avatar
+    av.appendChild(im)
+  } else av.textContent = ini(s.name)
+  return el
+}
+function cardEl(s, ids) {
+  var el = document.createElement('div')
+  el.className = 'tcard'
+  el.dataset.aid = s.id
+  var cols = ids.length === 1 ? 1 : 2
+  var tiles = ids.map(function (id) {
+    var v = VB[id]
+    return "<div class='tile' data-v='" + id + "' title='" + v.title + "'><div class='tl'>" + iconHtml(v) + '<span>' + v.label + '</span></div><b>—</b></div>'
+  }).join('')
+  el.innerHTML = "<div class='th'><span class='nm2'></span><span class='tk'>" + iconHtml(VB.kcal) + "<b data-k>0</b></span></div><div class='tbd' style='grid-template-columns:repeat(" + cols + ",1fr)'>" + tiles + '</div>'
+  var nm = Array.from(s.name)
+  el.querySelector('.nm2').textContent = nm.length > 16 ? nm.slice(0, 16).join('').trimEnd() : s.name
+  return el
+}
+function buildStage() {
+  layoutDirty = false
+  var st = $('stage'), list = visible(), n = list.length, md = mode(), ids = cfg.vars[md]
+  st.innerHTML = ''
+  st.style.cssText = ''
+  st.className = ''
+  document.querySelectorAll('#views .ib').forEach(function (b) { b.classList.toggle('on', b.dataset.view === cfg.view) })
+  if (!n) { st.innerHTML = "<div class='empty'>Aguardando atletas confirmados na sessão…</div>"; return }
+  if (md === 'list') {
+    var cols = n <= 5 ? 1 : n <= 12 ? 2 : n <= 27 ? 3 : 4
+    st.className = 'lst'
+    st.style.gridTemplateColumns = 'repeat(' + cols + ',minmax(0,1fr))'
+    st.style.gridTemplateRows = 'repeat(' + Math.ceil(n / cols) + ',auto)'
+    list.forEach(function (s) { st.appendChild(listRow(s, cfg.view === 'list1' ? 'l1' : 'l2', ids)) })
+  } else {
+    var g = gridCfg(n), cap = g.cols * g.rows, over = n > cap, gap = Math.min(g.gap, 16)
+    st.className = 'crd' + (over ? ' scroll' : '')
+    st.style.gap = gap + 'px'
+    st.style.padding = gap + 'px'
+    st.style.gridTemplateColumns = 'repeat(' + g.cols + ',minmax(0,1fr))'
+    st.style.gridTemplateRows = 'repeat(' + (over ? Math.ceil(n / g.cols) : g.rows) + ',minmax(' + (over ? '170px' : '0') + ',1fr))'
+    list.forEach(function (s) { st.appendChild(cardEl(s, ids)) })
+  }
+  updateAll()
+}
+
+// ── Atualização dos valores ─────────────────────────────────────
+function updateAll() {
+  var now = Date.now(), live = 0, total = 0
+  document.querySelectorAll('[data-aid]').forEach(function (el) {
+    var s = athletes.get(el.dataset.aid)
+    if (!s) return
+    var stale = !s.lastSeen || now - s.lastSeen > STALE_MS || s.hr <= 0
+    var z = stale ? 0 : s.zone
+    total++
+    if (!stale) live++
+    el.classList.toggle('stale', stale)
+    if (el.classList.contains('tcard')) {
+      el.style.background = ZCARD[z]
+      el.querySelector('[data-k]').textContent = s.lastSeen ? Math.round(s.cal) : 0
+    } else {
+      var w = el.querySelector('.who')
+      w.style.background = ZBG[z]
+      w.style.color = ZFG[z]
+      el.classList.toggle('z5', z === 5)
+      el.querySelector('.zb').textContent = stale ? '' : 'Z' + z + (z === 5 ? ' !' : '')
+      el.querySelector('.nm small').textContent = stale ? (s.lastSeen ? 'Sem sinal' : 'Aguardando sensor') : s.hrMax + ' bpm máx'
+    }
+    el.querySelectorAll('[data-v]').forEach(function (c) {
+      var val = VB[c.dataset.v].get(s, now)
+      c.querySelector('b').textContent = val == null ? '—' : val
+    })
+  })
+  $('cnt').textContent = live + '/' + total + ' com sinal'
+  if (timerStart && sessActive()) {
+    var e = Math.floor((now - timerStart) / 1000)
+    $('tmr').textContent = pad(Math.floor(e / 3600)) + ':' + pad(Math.floor(e % 3600 / 60)) + ':' + pad(e % 60)
+  }
+}
+function tick() { if (layoutDirty) buildStage(); else updateAll() }
+var pend = false
+function sched() { if (pend) return; pend = true; setTimeout(function () { pend = false; tick() }, 250) }
+
+// ── WebSocket (mesmo protocolo da Tela 2) ───────────────────────
+var ws = null, rt = null
+function setWs(on) {
+  var el = $('ws')
+  el.className = on ? 'on' : 'off'
+  el.innerHTML = on ? "<i class='fa-solid fa-signal-stream'></i>" : "<i class='fa-solid fa-signal-stream-slash'></i>"
+}
+function connect() {
+  if (rt) { clearTimeout(rt); rt = null }
+  var p = location.protocol === 'https:' ? 'wss' : 'ws'
+  ws = new WebSocket(p + '://' + location.hostname + ':' + ANT_PORT + '/ws/heartrate')
+  ws.onopen = function () { setWs(true); ws.send(JSON.stringify({ type: 'request_data' })) }
+  ws.onmessage = function (e) {
+    try {
+      var m = JSON.parse(e.data)
+      if (m.type === 'initial_data' || m.type === 'reset_all') (m.data || []).forEach(ingest)
+      else if (m.type === 'heartrate' && m.data) ingest(m.data)
+      else if (m.type === 'session_ended') loadSession()
+      sched()
+    } catch (err) { console.error('[WS]', err) }
+  }
+  ws.onclose = function () { setWs(false); rt = setTimeout(connect, 3000) }
+}
+setInterval(function () { if (ws && ws.readyState === 1) ws.send(JSON.stringify({ type: 'ping' })) }, 25000)
+
+// ── Diálogo de configuração ─────────────────────────────────────
+function renderCfg() {
+  var md = mode(), lim = LIMIT[md], sel = cfg.vars[md]
+  document.querySelectorAll('#cfgView input[type=radio]').forEach(function (i) { i.checked = i.value === cfg.view })
+  $('cfgLabels').checked = cfg.labels
+  $('cfgCnt').textContent = '(' + sel.length + '/' + lim + ')'
+  var full = sel.length >= lim
+  function item(v, btns, cls) {
+    return "<div class='ci " + (cls || '') + "'>" + iconHtml(v) + '<span><b>' + v.label + '</b><em>' + v.title + "</em></span><span class='ca'>" + btns + '</span></div>'
+  }
+  var h = sel.map(function (id, i) {
+    return item(VB[id], "<button data-a='up' data-id='" + id + "' " + (i ? '' : 'disabled') + ">↑</button><button data-a='dn' data-id='" + id + "' " + (i < sel.length - 1 ? '' : 'disabled') + ">↓</button><button data-a='rm' data-id='" + id + "'>Remover</button>")
+  }).join('')
+  var avail = VARS.filter(function (v) { return !v.soon && sel.indexOf(v.id) < 0 && !(md === 'cards' && v.id === 'kcal') })
+  h += "<div class='sep'>Disponíveis</div>" + avail.map(function (v) {
+    return item(v, "<button data-a='add' data-id='" + v.id + "' " + (full ? 'disabled' : '') + '>Adicionar</button>')
+  }).join('')
+  h += "<div class='sep'>Em breve (sem fonte de dados ainda)</div>" + VARS.filter(function (v) { return v.soon }).map(function (v) {
+    return item(v, "<span class='soon'>em breve</span>", 'dim')
+  }).join('')
+  $('cfgList').innerHTML = h
+}
+function applyCfg() { saveCfg(); buildStage(); renderCfg() }
+$('cfgList').addEventListener('click', function (e) {
+  var b = e.target.closest('button[data-a]')
+  if (!b || b.disabled) return
+  var arr = cfg.vars[mode()], id = b.dataset.id, i = arr.indexOf(id), a = b.dataset.a
+  if (a === 'add' && arr.length < LIMIT[mode()]) arr.push(id)
+  else if (a === 'rm') arr.splice(i, 1)
+  else if (a === 'up' && i > 0) { arr[i] = arr[i - 1]; arr[i - 1] = id }
+  else if (a === 'dn' && i < arr.length - 1) { arr[i] = arr[i + 1]; arr[i + 1] = id }
+  applyCfg()
+})
+document.querySelectorAll('#cfgView input[type=radio]').forEach(function (r) {
+  r.addEventListener('change', function () { cfg.view = r.value; applyCfg() })
+})
+$('cfgLabels').addEventListener('change', function (e) { cfg.labels = e.target.checked; applyCfg() })
+$('cfgReset').addEventListener('click', function () {
+  cfg = { view: DEF.view, labels: true, vars: { list: DEF.vars.list.slice(), cards: DEF.vars.cards.slice() } }
+  applyCfg()
+})
+$('bCfg').addEventListener('click', function () { $('modal').hidden = false; renderCfg() })
+$('cfgX').addEventListener('click', function () { $('modal').hidden = true })
+$('cfgOk').addEventListener('click', function () { $('modal').hidden = true })
+document.querySelectorAll('#views .ib').forEach(function (b) {
+  b.addEventListener('click', function () { cfg.view = b.dataset.view; saveCfg(); buildStage(); if (!$('modal').hidden) renderCfg() })
+})
+$('bFs').addEventListener('click', function () {
+  if (document.fullscreenElement) document.exitFullscreen()
+  else document.documentElement.requestFullscreen()
+})
+
+// ── Boot ────────────────────────────────────────────────────────
+setInterval(tick, 1000)
+setInterval(loadSession, 30000)
+window.addEventListener('resize', function () { if (mode() === 'cards') layoutDirty = true })
+setWs(false)
+loadSession().then(function () { buildStage(); connect() })
+})()
+</script>
+</body>
+</html>
