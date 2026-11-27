@@ -12,11 +12,18 @@ function getPool() {
   return mysql.createPool(process.env.DATABASE_URL)
 }
 
+// users.gender no banco: 'M' | 'F' | 'other'. Aceita tambem 'female'.
+function isFemale(gender) {
+  return /^f/i.test(String(gender ?? ''))
+}
+
 function calcTRIMPBanister(hrseries, hrMax, hrResting, gender) {
-  const b = gender === 'female' ? 1.67 : 1.92
+  const b = isFemale(gender) ? 1.67 : 1.92
   const INTERVAL_MIN = 5 / 60
+  const range = hrMax - hrResting
+  if (!(range > 0)) return 0
   return hrseries.reduce((acc, row) => {
-    const fcRel = (row.hr_bpm - hrResting) / (hrMax - hrResting)
+    const fcRel = (row.hr_bpm - hrResting) / range
     if (fcRel <= 0) return acc
     return acc + INTERVAL_MIN * fcRel * Math.exp(b * fcRel)
   }, 0)
@@ -62,8 +69,9 @@ export async function PUT(req, { params }) {
     if (trainingSession.status === 'finished')
       return NextResponse.json({ error: 'Sessão já encerrada' }, { status: 400 })
 
+    // athlete_profiles.hr_rest (nome real da coluna) exposto como hr_resting
     const [athletes] = await pool.query(
-      `SELECT sa.athlete_id, sa.resting_hr_pre, ap.hr_max, ap.hr_resting, ap.weight_kg, u.gender
+      `SELECT sa.athlete_id, sa.resting_hr_pre, ap.hr_max, ap.hr_rest AS hr_resting, ap.weight_kg, u.gender
        FROM session_athletes sa
        JOIN athlete_profiles ap ON ap.user_id = sa.athlete_id
        JOIN users u ON u.id = sa.athlete_id
@@ -91,7 +99,7 @@ export async function PUT(req, { params }) {
 
       const hrResting = athlete.resting_hr_pre ?? athlete.hr_resting ?? 60
       const hrMaxVal  = athlete.hr_max ?? 190
-      const gender    = athlete.gender ?? 'male'
+      const gender    = athlete.gender ?? 'M'
       const trimp        = calcTRIMPBanister(hrseries, hrMaxVal, hrResting, gender)
       const trimpEdwards = calcTRIMPEdwards(timeByZone)
       const points       = calcPoints(timeByZone)
@@ -164,6 +172,9 @@ export async function PUT(req, { params }) {
     }))
 
     return NextResponse.json({ success: true, message: 'Sessão encerrada com sucesso', summary })
+  } catch (err) {
+    console.error('[PUT /api/sessions/[id]/finish]', err)
+    return NextResponse.json({ error: 'Erro interno ao encerrar a sessão' }, { status: 500 })
   } finally {
     await pool.end()
   }
