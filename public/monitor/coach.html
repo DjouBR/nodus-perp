@@ -11,17 +11,22 @@ html,body{margin:0;height:100%;overflow:hidden;background:#eef1f5;color:#111827;
 [hidden]{display:none!important}
 #top{height:52px;background:#0b1220;color:#fff;display:flex;align-items:center;gap:10px;padding:0 14px;white-space:nowrap}
 #top .brand{color:#1aff15;font-size:22px}
-#ttl{font-size:16px;margin:0;font-weight:700;overflow:hidden;text-overflow:ellipsis;max-width:32vw}
+#ttl{font-size:16px;margin:0;font-weight:700;overflow:hidden;text-overflow:ellipsis;max-width:28vw}
 .sp{flex:1}
 .chip{font-size:11px;font-weight:700;letter-spacing:.05em;padding:3px 10px;border-radius:99px;background:#374151;color:#e5e7eb}
 .chip.live{background:#14532d;color:#86efac}
 .chip.wait{background:#713f12;color:#fde68a}
+.alr{font-size:12px;font-weight:700;padding:3px 10px;border-radius:99px;background:#78350f;color:#fde68a}
+.alr.bad{background:#7f1d1d;color:#fecaca}
 #cnt{font-size:13px;color:#9ca3af}
 #tmr{font-variant-numeric:tabular-nums;font-weight:700;font-size:15px}
 .grp{display:flex;gap:4px}
 .ib{background:transparent;border:1px solid #374151;color:#d1d5db;border-radius:8px;height:32px;min-width:32px;padding:0 10px;cursor:pointer;font-size:12px;font-weight:600;font-family:inherit}
 .ib:hover{background:#1f2937}
 .ib.on{background:#1aff15;border-color:#1aff15;color:#06270a}
+.ib.dng{border-color:#ef4444;color:#fecaca}
+.ib.dng:hover{background:#7f1d1d}
+.ib:disabled{opacity:.5;cursor:default}
 #ws{font-size:15px}
 #ws.on{color:#22c55e}
 #ws.off{color:#ef4444}
@@ -30,6 +35,7 @@ html,body{margin:0;height:100%;overflow:hidden;background:#eef1f5;color:#111827;
 #stage.crd{display:grid;overflow:hidden}
 #stage.crd.scroll{overflow:auto}
 .empty{grid-column:1/-1;padding:80px 20px;text-align:center;color:#6b7280;font-size:20px;font-weight:600}
+@media(max-width:1280px){.lb{display:none}}
 
 .row{background:#fff;border-radius:10px;box-shadow:0 1px 3px rgba(0,0,0,.14);overflow:hidden;min-width:0}
 .row.z5{box-shadow:0 0 0 2px #f44336,0 1px 3px rgba(0,0,0,.14)}
@@ -43,6 +49,8 @@ html,body{margin:0;height:100%;overflow:hidden;background:#eef1f5;color:#111827;
 .nm b{font-size:15px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .nm small{font-size:11px;opacity:.85;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .zb{font-weight:800;font-size:13px;white-space:nowrap}
+.kb{background:transparent;border:0;color:inherit;font-size:18px;font-weight:900;cursor:pointer;padding:2px 7px;border-radius:6px;line-height:1;opacity:.8}
+.kb:hover{background:rgba(0,0,0,.18);opacity:1}
 .vars{display:grid;grid-template-columns:repeat(auto-fit,minmax(54px,1fr));gap:2px 0;padding:6px;align-items:center;flex:1}
 .cell{display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;padding:2px 0;min-width:0}
 .cell i{font-size:18px}
@@ -53,6 +61,7 @@ html,body{margin:0;height:100%;overflow:hidden;background:#eef1f5;color:#111827;
 .tcard{container-type:size;display:flex;flex-direction:column;border-radius:10px;overflow:hidden;box-shadow:0 2px 6px rgba(0,0,0,.25);transition:background .8s;min-width:0;min-height:0}
 .th{background:#000;color:#1aff15;font-weight:800;font-size:clamp(13px,9cqh,44px);padding:0 4cqw;height:17cqh;display:flex;align-items:center;justify-content:space-between;gap:8px;white-space:nowrap;flex:none}
 .th .tk{display:flex;align-items:center;gap:6px}
+.th .kb{color:#1aff15;font-size:clamp(14px,8cqh,30px)}
 .tbd{flex:1;display:grid;grid-auto-rows:1fr;gap:2cqmin;padding:2.5cqmin;min-height:0}
 .tile{background:rgba(255,255,255,.4);border-radius:8px;display:flex;flex-direction:column;align-items:center;justify-content:center;min-width:0;min-height:0;overflow:hidden}
 .tile b{font-size:clamp(14px,14cqmin,110px);font-weight:900;line-height:1.05;font-variant-numeric:tabular-nums}
@@ -60,6 +69,7 @@ html,body{margin:0;height:100%;overflow:hidden;background:#eef1f5;color:#111827;
 .tcard.stale .tbd{opacity:.55}
 
 .modal{position:fixed;inset:0;background:rgba(0,0,0,.5);display:flex;align-items:center;justify-content:center;z-index:50}
+#cfm{z-index:70}
 .mbox{background:#fff;border-radius:12px;width:min(660px,94vw);max-height:90vh;display:flex;flex-direction:column;box-shadow:0 20px 50px rgba(0,0,0,.4)}
 .mh,.mf{padding:14px 18px;display:flex;align-items:center;justify-content:space-between;gap:10px}
 .mh{border-bottom:1px solid #e5e7eb;font-size:17px}
@@ -79,6 +89,16 @@ html,body{margin:0;height:100%;overflow:hidden;background:#eef1f5;color:#111827;
 .soon{font-size:11px;font-weight:700;color:#92400e;background:#fef3c7;border-radius:99px;padding:2px 8px}
 .btn{border:1px solid #d1d5db;background:#fff;border-radius:8px;padding:8px 14px;font-weight:600;cursor:pointer}
 .btn.pri{background:#111827;color:#fff;border-color:#111827}
+.btn.dng{background:#b91c1c;color:#fff;border-color:#b91c1c}
+.sm{width:100%;border-collapse:collapse;font-size:13px}
+.sm th,.sm td{padding:6px 8px;border-bottom:1px solid #e5e7eb;text-align:right}
+.sm th:first-child,.sm td:first-child{text-align:left}
+#menu{position:fixed;z-index:60;width:200px;background:#fff;border:1px solid #e5e7eb;border-radius:10px;box-shadow:0 10px 30px rgba(0,0,0,.25);overflow:hidden}
+#menu button{display:block;width:100%;padding:10px 12px;text-align:left;border:0;background:#fff;cursor:pointer;font-size:13px;font-family:inherit}
+#menu button:hover{background:#f3f4f6}
+#menu button.dg{color:#b91c1c}
+#toast{position:fixed;left:50%;bottom:18px;transform:translateX(-50%);background:#111827;color:#fff;padding:10px 16px;border-radius:10px;font-size:13px;z-index:80;box-shadow:0 8px 24px rgba(0,0,0,.3)}
+#toast.err{background:#b91c1c}
 </style>
 </head>
 <body>
@@ -86,20 +106,29 @@ html,body{margin:0;height:100%;overflow:hidden;background:#eef1f5;color:#111827;
   <i class='fa-solid fa-heart-pulse brand'></i>
   <h1 id='ttl'>NODUS — Monitor do Treinador</h1>
   <span id='stt' class='chip'>CARREGANDO</span>
+  <span id='alr' class='alr' hidden></span>
   <span class='sp'></span>
   <span id='cnt'>0/0 com sinal</span>
   <span id='tmr'>00:00:00</span>
   <div class='grp' id='views'>
-    <button class='ib' data-view='list1' title='Lista 1 — nome ao lado das variáveis'><i class='fa-solid fa-table-list'></i> Lista 1</button>
-    <button class='ib' data-view='list2' title='Lista 2 — nome acima das variáveis'><i class='fa-solid fa-list'></i> Lista 2</button>
-    <button class='ib' data-view='cards' title='Cards (até 6 variáveis)'><i class='fa-solid fa-table-cells-large'></i> Cards</button>
+    <button class='ib' data-view='list1' title='Lista 1 — nome ao lado das variáveis'><i class='fa-solid fa-table-list'></i><span class='lb'> Lista 1</span></button>
+    <button class='ib' data-view='list2' title='Lista 2 — nome acima das variáveis'><i class='fa-solid fa-list'></i><span class='lb'> Lista 2</span></button>
+    <button class='ib' data-view='cards' title='Cards (até 6 variáveis)'><i class='fa-solid fa-table-cells-large'></i><span class='lb'> Cards</span></button>
   </div>
   <button class='ib' id='bCfg' title='Configurar variáveis'><i class='fa-solid fa-sliders'></i></button>
+  <button class='ib' id='bRst' title='Zerar as calorias de todos'><i class='fa-solid fa-rotate-left'></i><span class='lb'> Zerar kcal</span></button>
+  <button class='ib dng' id='bEnd' title='Encerrar a sessão'><i class='fa-solid fa-flag-checkered'></i><span class='lb'> Encerrar</span></button>
   <button class='ib' id='bFs' title='Tela cheia'><i class='fa-solid fa-expand'></i></button>
   <span id='ws' class='off' title='Conexão com o ant-server'><i class='fa-solid fa-signal-stream-slash'></i></span>
 </header>
 
 <main id='stage'></main>
+
+<div id='menu' hidden>
+  <button data-m='reset'><i class='fa-solid fa-rotate-left'></i> Zerar calorias</button>
+  <button data-m='remove' class='dg'><i class='fa-solid fa-user-minus'></i> Remover da sessão</button>
+</div>
+<div id='toast' hidden></div>
 
 <div id='modal' class='modal' hidden>
   <div class='mbox'>
@@ -115,6 +144,23 @@ html,body{margin:0;height:100%;overflow:hidden;background:#eef1f5;color:#111827;
       <div id='cfgList'></div>
     </div>
     <div class='mf'><button class='btn' id='cfgReset'>Restaurar padrão</button><button class='btn pri' id='cfgOk'>Concluir</button></div>
+  </div>
+</div>
+
+<div id='cfm' class='modal' hidden>
+  <div class='mbox' style='width:min(460px,94vw)'>
+    <div class='mh'><b id='cfmT'></b></div>
+    <div class='mbd'><p id='cfmM' style='margin:0;line-height:1.5'></p></div>
+    <div class='mf'><button class='btn' id='cfmNo'>Cancelar</button><button class='btn pri' id='cfmOk'>Confirmar</button></div>
+  </div>
+</div>
+
+<div id='sum' class='modal' hidden>
+  <div class='mbox'>
+    <div class='mh'><b>Sessão encerrada — resumo</b><button class='btn' id='sumX'>Fechar</button></div>
+    <div class='mbd'>
+      <table class='sm'><thead><tr><th>Atleta</th><th>FC méd</th><th>FC máx</th><th>kcal</th><th>TRIMP</th><th>Pontos</th></tr></thead><tbody id='sumB'></tbody></table>
+    </div>
   </div>
 </div>
 
@@ -140,7 +186,8 @@ var ini = function (n) { return (n || '?').trim().charAt(0).toUpperCase() }
 var athletes = new Map()
 var session = null, tmin = 2, tmax = 4, layoutDirty = true, timerStart = 0
 function newState(id) {
-  return { id: id, name: 'Atleta ' + id, avatar: null, hrMax: 190, hrRest: 60, female: false, checkedIn: false,
+  return { id: id, rawId: null, name: 'Atleta ' + id, avatar: null, hrMax: 190, hrRest: 60, female: false, checkedIn: false,
+    fromApi: false, apiName: false, removed: false,
     hr: 0, cal: 0, zone: 0, lastSeen: 0, lastT: 0, trimp: 0, pts: 0, tzSec: 0, win: [], series: [], lastSample: 0 }
 }
 
@@ -213,6 +260,39 @@ function loadCfg() {
 var cfg = loadCfg()
 function saveCfg() { try { localStorage.setItem(KEY, JSON.stringify(cfg)) } catch (e) {} }
 
+// ── Utilitários de interface ────────────────────────────────
+var tt = null
+function toast(msg, kind) {
+  var t = $('toast')
+  t.textContent = msg
+  t.className = kind === 'err' ? 'err' : ''
+  t.hidden = false
+  clearTimeout(tt)
+  tt = setTimeout(function () { t.hidden = true }, 3500)
+}
+function api(method, url, body) {
+  return fetch(url, { method: method, headers: { 'Content-Type': 'application/json' }, body: body ? JSON.stringify(body) : undefined })
+    .then(function (r) {
+      return r.json().catch(function () { return {} }).then(function (j) {
+        if (!r.ok) throw new Error(j.error || ('HTTP ' + r.status))
+        return j
+      })
+    })
+}
+var cfmRes = null
+function ask(title, msg, okLabel, danger) {
+  return new Promise(function (res) {
+    cfmRes = res
+    $('cfmT').textContent = title
+    $('cfmM').textContent = msg
+    var b = $('cfmOk')
+    b.textContent = okLabel || 'Confirmar'
+    b.className = 'btn ' + (danger ? 'dng' : 'pri')
+    $('cfm').hidden = false
+  })
+}
+function answer(v) { $('cfm').hidden = true; if (cfmRes) cfmRes(v); cfmRes = null }
+
 // ── Dados da sessão e atletas (API autenticada) ─────────────────
 function sessActive() { return session && session.status === 'active' }
 function setStatus() {
@@ -220,6 +300,9 @@ function setStatus() {
   var el = $('stt')
   el.className = 'chip' + (st === 'active' ? ' live' : (st === 'scheduled' || st === 'pending') ? ' wait' : '')
   el.textContent = st === 'active' ? 'AO VIVO' : (st === 'scheduled' || st === 'pending') ? 'AGUARDANDO INÍCIO' : st === 'finished' ? 'ENCERRADA' : st === 'cancelled' ? 'CANCELADA' : '—'
+  var done = st === 'finished' || st === 'cancelled'
+  $('bEnd').hidden = done
+  $('bRst').hidden = done
 }
 function loadSession() {
   return fetch('/api/sessions/' + SESSION_ID, { cache: 'no-store' }).then(function (r) {
@@ -241,6 +324,8 @@ function loadSession() {
       if (!s) { s = newState(id); athletes.set(id, s); layoutDirty = true }
       var ci = !!Number(a.checked_in)
       if (s.checkedIn !== ci || s.name !== a.name) layoutDirty = true
+      if (s.rawId == null) s.rawId = a.athlete_id
+      s.fromApi = true
       s.name = a.name || s.name
       s.avatar = a.avatar_url || null
       s.hrMax = Number(a.hr_max) || s.hrMax
@@ -259,6 +344,8 @@ function ingest(a) {
   var id = String(a.athleteId)
   var s = athletes.get(id)
   if (!s) { s = newState(id); athletes.set(id, s); layoutDirty = true }
+  if (s.removed) return
+  s.rawId = a.athleteId
   if (a.athleteName && !s.apiName) s.name = a.athleteName
   if (a.maxHeartRate) s.hrMax = Number(a.maxHeartRate)
   var now = Date.now()
@@ -289,7 +376,7 @@ function ingest(a) {
 
 // ── Layout ──────────────────────────────────────────────────────
 function visible() {
-  return Array.from(athletes.values()).filter(function (s) { return s.checkedIn || s.lastSeen })
+  return Array.from(athletes.values()).filter(function (s) { return !s.removed && (s.checkedIn || s.lastSeen) })
     .sort(function (a, b) { return a.name.localeCompare(b.name, 'pt-BR') })
 }
 function gridCfg(n) {
@@ -302,11 +389,12 @@ function cellHtml(id) {
   var v = VB[id]
   return "<div class='cell' data-v='" + id + "' title='" + v.title + "'>" + iconHtml(v) + '<b>—</b>' + (cfg.labels ? '<small>' + v.label + '</small>' : '') + '</div>'
 }
+var KB = "<button class='kb' title='Ações do atleta'>⋮</button>"
 function listRow(s, kind, ids) {
   var el = document.createElement('div')
   el.className = 'row ' + kind
   el.dataset.aid = s.id
-  el.innerHTML = "<div class='who'><div class='av'></div><div class='nm'><b></b><small></small></div><div class='zb'></div></div><div class='vars'>" + ids.map(cellHtml).join('') + '</div>'
+  el.innerHTML = "<div class='who'><div class='av'></div><div class='nm'><b></b><small></small></div><div class='zb'></div>" + KB + "</div><div class='vars'>" + ids.map(cellHtml).join('') + '</div>'
   el.querySelector('.nm b').textContent = s.name
   var av = el.querySelector('.av')
   if (s.avatar) {
@@ -327,7 +415,7 @@ function cardEl(s, ids) {
     var v = VB[id]
     return "<div class='tile' data-v='" + id + "' title='" + v.title + "'><div class='tl'>" + iconHtml(v) + '<span>' + v.label + '</span></div><b>—</b></div>'
   }).join('')
-  el.innerHTML = "<div class='th'><span class='nm2'></span><span class='tk'>" + iconHtml(VB.kcal) + "<b data-k>0</b></span></div><div class='tbd' style='grid-template-columns:repeat(" + cols + ",1fr)'>" + tiles + '</div>'
+  el.innerHTML = "<div class='th'><span class='nm2'></span><span class='tk'>" + iconHtml(VB.kcal) + "<b data-k>0</b>" + KB + "</span></div><div class='tbd' style='grid-template-columns:repeat(" + cols + ",1fr)'>" + tiles + '</div>'
   var nm = Array.from(s.name)
   el.querySelector('.nm2').textContent = nm.length > 16 ? nm.slice(0, 16).join('').trimEnd() : s.name
   return el
@@ -339,7 +427,7 @@ function buildStage() {
   st.style.cssText = ''
   st.className = ''
   document.querySelectorAll('#views .ib').forEach(function (b) { b.classList.toggle('on', b.dataset.view === cfg.view) })
-  if (!n) { st.innerHTML = "<div class='empty'>Aguardando atletas confirmados na sessão…</div>"; return }
+  if (!n) { st.innerHTML = "<div class='empty'>Aguardando atletas confirmados na sessão…</div>"; updateAll(); return }
   if (md === 'list') {
     var cols = n <= 5 ? 1 : n <= 12 ? 2 : n <= 27 ? 3 : 4
     st.className = 'lst'
@@ -358,9 +446,9 @@ function buildStage() {
   updateAll()
 }
 
-// ── Atualização dos valores ─────────────────────────────────────
+// ── Atualização dos valores e alertas ───────────────────────────
 function updateAll() {
-  var now = Date.now(), live = 0, total = 0
+  var now = Date.now(), live = 0, total = 0, lost = 0, z5 = 0
   document.querySelectorAll('[data-aid]').forEach(function (el) {
     var s = athletes.get(el.dataset.aid)
     if (!s) return
@@ -368,6 +456,8 @@ function updateAll() {
     var z = stale ? 0 : s.zone
     total++
     if (!stale) live++
+    if (stale && s.lastSeen && sessActive()) lost++
+    if (z === 5) z5++
     el.classList.toggle('stale', stale)
     if (el.classList.contains('tcard')) {
       el.style.background = ZCARD[z]
@@ -378,7 +468,7 @@ function updateAll() {
       w.style.color = ZFG[z]
       el.classList.toggle('z5', z === 5)
       el.querySelector('.zb').textContent = stale ? '' : 'Z' + z + (z === 5 ? ' !' : '')
-      el.querySelector('.nm small').textContent = stale ? (s.lastSeen ? 'Sem sinal' : 'Aguardando sensor') : s.hrMax + ' bpm máx'
+      el.querySelector('.nm small').textContent = stale ? (s.lastSeen ? 'Sem sinal há ' + mmss((now - s.lastSeen) / 1000) : 'Aguardando sensor') : s.hrMax + ' bpm máx'
     }
     el.querySelectorAll('[data-v]').forEach(function (c) {
       var val = VB[c.dataset.v].get(s, now)
@@ -386,6 +476,13 @@ function updateAll() {
     })
   })
   $('cnt').textContent = live + '/' + total + ' com sinal'
+  var parts = []
+  if (lost) parts.push(lost + ' sem sinal')
+  if (z5) parts.push(z5 + ' em Z5')
+  var al = $('alr')
+  al.hidden = !parts.length
+  al.className = 'alr' + (lost ? ' bad' : '')
+  al.innerHTML = parts.length ? "<i class='fa-solid fa-triangle-exclamation'></i> " + parts.join(' · ') : ''
   if (timerStart && sessActive()) {
     var e = Math.floor((now - timerStart) / 1000)
     $('tmr').textContent = pad(Math.floor(e / 3600)) + ':' + pad(Math.floor(e % 3600 / 60)) + ':' + pad(e % 60)
@@ -401,6 +498,11 @@ function setWs(on) {
   var el = $('ws')
   el.className = on ? 'on' : 'off'
   el.innerHTML = on ? "<i class='fa-solid fa-signal-stream'></i>" : "<i class='fa-solid fa-signal-stream-slash'></i>"
+}
+function sendWs(o) {
+  if (ws && ws.readyState === 1) { ws.send(JSON.stringify(o)); return true }
+  toast('Sem conexão com o ant-server', 'err')
+  return false
 }
 function connect() {
   if (rt) { clearTimeout(rt); rt = null }
@@ -419,6 +521,117 @@ function connect() {
   ws.onclose = function () { setWs(false); rt = setTimeout(connect, 3000) }
 }
 setInterval(function () { if (ws && ws.readyState === 1) ws.send(JSON.stringify({ type: 'ping' })) }, 25000)
+
+// ── Controles do treinador (etapa B) ──────────────────────────
+var menuId = null
+function openMenu(btn, id) {
+  menuId = id
+  var m = $('menu'), r = btn.getBoundingClientRect()
+  m.hidden = false
+  m.style.top = Math.max(8, Math.min(r.bottom + 4, window.innerHeight - 100)) + 'px'
+  m.style.left = Math.max(8, Math.min(r.right - 200, window.innerWidth - 208)) + 'px'
+}
+function resetCal(id) {
+  var s = athletes.get(id)
+  if (!s) return
+  if (!sendWs({ type: 'reset_calories', athleteId: s.rawId != null ? s.rawId : id })) return
+  s.cal = 0
+  toast('Calorias de ' + s.name + ' zeradas')
+}
+function recheckRemoved(s, aid) {
+  loadSession().then(function () {
+    if (s.removed && s.checkedIn) {
+      api('PUT', '/api/sessions/' + SESSION_ID + '/checkin-staff', { athleteId: aid }).then(function () { s.checkedIn = false }).catch(function () {})
+    }
+  })
+}
+function removeAthlete(id) {
+  var s = athletes.get(id)
+  if (!s) return
+  var aid = s.rawId != null ? s.rawId : id
+  s.removed = true
+  layoutDirty = true
+  tick()
+  if (!s.fromApi) { toast(s.name + ' removido da tela'); return }
+  api('PUT', '/api/sessions/' + SESSION_ID + '/assign-sensor', { athleteId: aid, serial: null })
+    .then(function () { return s.checkedIn ? api('PUT', '/api/sessions/' + SESSION_ID + '/checkin-staff', { athleteId: aid }) : null })
+    .then(function () {
+      s.checkedIn = false
+      toast(s.name + ' removido da sessão')
+      setTimeout(function () { recheckRemoved(s, aid) }, 12000)
+    })
+    .catch(function (e) {
+      s.removed = false
+      layoutDirty = true
+      toast('Não foi possível remover: ' + e.message, 'err')
+    })
+}
+function doMenu(m) {
+  var id = menuId, s = athletes.get(id)
+  if (!s) return
+  if (m === 'reset') resetCal(id)
+  else if (m === 'remove') {
+    ask('Remover atleta', 'Remover ' + s.name + ' desta sessão? O sensor é desvinculado e o check-in é desfeito. Os dados já gravados são mantidos.', 'Remover', true)
+      .then(function (ok) { if (ok) removeAthlete(id) })
+  }
+}
+function showSummary(list) {
+  var tb = $('sumB')
+  tb.innerHTML = ''
+  if (!list.length) {
+    var r0 = document.createElement('tr'), c0 = document.createElement('td')
+    c0.colSpan = 6
+    c0.textContent = 'Nenhum dado de FC foi gravado nesta sessão.'
+    r0.appendChild(c0)
+    tb.appendChild(r0)
+  }
+  list.forEach(function (x) {
+    var s = athletes.get(String(x.athleteId))
+    var tr = document.createElement('tr')
+    ;[s ? s.name : String(x.athleteId), x.avgHr, x.maxHr, Math.round(x.calories || 0), Math.round(x.trimp || 0), Math.round(x.points || 0)].forEach(function (v) {
+      var td = document.createElement('td')
+      td.textContent = v
+      tr.appendChild(td)
+    })
+    tb.appendChild(tr)
+  })
+  $('sum').hidden = false
+}
+function finishSession() {
+  ask('Encerrar sessão', 'Isso encerra a sessão para todos. A Tela 2 passa a mostrar Sessão Encerrada e o TRIMP, os pontos e as calorias finais são gravados. Não dá para desfazer.', 'Encerrar sessão', true).then(function (ok) {
+    if (!ok) return
+    $('bEnd').disabled = true
+    api('PUT', '/api/sessions/' + SESSION_ID + '/finish').then(function (j) {
+      $('bEnd').disabled = false
+      toast('Sessão encerrada')
+      showSummary(j.summary || [])
+      loadSession()
+    }).catch(function (e) {
+      $('bEnd').disabled = false
+      toast('Erro ao encerrar: ' + e.message, 'err')
+    })
+  })
+}
+document.addEventListener('click', function (e) {
+  var kb = e.target.closest('.kb')
+  if (kb) {
+    var host = kb.closest('[data-aid]')
+    if (host) openMenu(kb, host.dataset.aid)
+    return
+  }
+  var mi = e.target.closest('#menu button')
+  $('menu').hidden = true
+  if (mi) doMenu(mi.dataset.m)
+})
+$('cfmOk').addEventListener('click', function () { answer(true) })
+$('cfmNo').addEventListener('click', function () { answer(false) })
+$('sumX').addEventListener('click', function () { $('sum').hidden = true })
+$('bEnd').addEventListener('click', finishSession)
+$('bRst').addEventListener('click', function () {
+  ask('Zerar calorias', 'Zera as calorias acumuladas de todos os atletas no ant-server. TRIMP e pontos não são alterados.', 'Zerar calorias', false).then(function (ok) {
+    if (ok && sendWs({ type: 'reset_calories' })) toast('Calorias zeradas')
+  })
+})
 
 // ── Diálogo de configuração ─────────────────────────────────────
 function renderCfg() {
